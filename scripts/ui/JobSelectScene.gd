@@ -1,0 +1,189 @@
+extends Control
+
+signal job_selected(job_id: String)
+signal back_requested
+
+const JobDatabaseScript = preload("res://scripts/data/JobDatabase.gd")
+const AudioManagerScript = preload("res://scripts/audio/AudioManager.gd")
+
+var selected_job_id := "sword"
+var job_buttons: Dictionary = {}
+var confirm_button: Button
+var audio_manager: Node
+
+func _ready() -> void:
+	_build_scene()
+	audio_manager = AudioManagerScript.new()
+	add_child(audio_manager)
+	_select_job(selected_job_id)
+
+func _build_scene() -> void:
+	var background := ColorRect.new()
+	background.color = Color(0.035, 0.040, 0.045, 1.0)
+	background.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(background)
+
+	var root := VBoxContainer.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.offset_left = 58.0
+	root.offset_top = 38.0
+	root.offset_right = -58.0
+	root.offset_bottom = -42.0
+	root.add_theme_constant_override("separation", 18)
+	add_child(root)
+
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 14)
+	root.add_child(header)
+
+	var back_button := Button.new()
+	back_button.text = "返回"
+	back_button.custom_minimum_size = Vector2(84.0, 36.0)
+	back_button.pressed.connect(_on_back_pressed)
+	_style_button(back_button, Color(0.08, 0.09, 0.10, 0.96), Color(0.40, 0.44, 0.50, 1.0))
+	header.add_child(back_button)
+
+	var title := Label.new()
+	title.text = "选择职业"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", Color(0.96, 0.91, 0.76, 1.0))
+	header.add_child(title)
+
+	var header_spacer := Control.new()
+	header_spacer.custom_minimum_size = Vector2(84.0, 1.0)
+	header.add_child(header_spacer)
+
+	var job_row := HBoxContainer.new()
+	job_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	job_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	job_row.add_theme_constant_override("separation", 22)
+	root.add_child(job_row)
+
+	for job in JobDatabaseScript.all_jobs():
+		var job_id := str(job.get("id", ""))
+		var button := _create_job_card(job)
+		button.pressed.connect(_on_job_card_pressed.bind(job_id))
+		job_buttons[job_id] = button
+		job_row.add_child(button)
+
+	confirm_button = Button.new()
+	confirm_button.text = "确认选择"
+	confirm_button.custom_minimum_size = Vector2(180.0, 44.0)
+	confirm_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	confirm_button.pressed.connect(_on_confirm_pressed)
+	_style_button(confirm_button, Color(0.18, 0.12, 0.06, 0.96), Color(0.88, 0.62, 0.30, 1.0))
+	root.add_child(confirm_button)
+
+func _create_job_card(job: Dictionary) -> Button:
+	var button := Button.new()
+	button.text = ""
+	button.custom_minimum_size = Vector2(300.0, 420.0)
+	button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	button.focus_mode = Control.FOCUS_NONE
+
+	var layout := VBoxContainer.new()
+	layout.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layout.offset_left = 18.0
+	layout.offset_top = 18.0
+	layout.offset_right = -18.0
+	layout.offset_bottom = -18.0
+	layout.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layout.add_theme_constant_override("separation", 10)
+	button.add_child(layout)
+
+	var name_label := Label.new()
+	name_label.text = str(job.get("name", ""))
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.add_theme_font_size_override("font_size", 28)
+	name_label.add_theme_color_override("font_color", Color(0.98, 0.88, 0.66, 1.0))
+	layout.add_child(name_label)
+
+	var stat_label := Label.new()
+	stat_label.text = "生命 %d    攻 %d / 防 %d" % [int(job.get("max_hp", 0)), int(job.get("attack", 0)), int(job.get("defense", 0))]
+	stat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	stat_label.add_theme_font_size_override("font_size", 15)
+	stat_label.add_theme_color_override("font_color", Color(0.82, 0.86, 0.90, 1.0))
+	layout.add_child(stat_label)
+
+	var portrait := Panel.new()
+	portrait.custom_minimum_size = Vector2(1.0, 170.0)
+	portrait.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	portrait.add_theme_stylebox_override("panel", _panel_style(_portrait_color(str(job.get("id", ""))), Color(0.50, 0.56, 0.62, 1.0), 8, 1))
+	layout.add_child(portrait)
+
+	var portrait_label := Label.new()
+	portrait_label.text = str(job.get("name", ""))
+	portrait_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	portrait_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	portrait_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	portrait_label.add_theme_font_size_override("font_size", 22)
+	portrait_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.94, 1.0))
+	portrait.add_child(portrait_label)
+
+	var desc_label := Label.new()
+	desc_label.text = str(job.get("description", ""))
+	desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	desc_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	desc_label.add_theme_font_size_override("font_size", 14)
+	desc_label.add_theme_color_override("font_color", Color(0.86, 0.84, 0.78, 1.0))
+	layout.add_child(desc_label)
+
+	return button
+
+func _on_job_card_pressed(job_id: String) -> void:
+	_play_audio("ui_click")
+	_select_job(job_id)
+
+func _on_confirm_pressed() -> void:
+	_play_audio("ui_confirm")
+	job_selected.emit(selected_job_id)
+
+func _on_back_pressed() -> void:
+	_play_audio("ui_click")
+	back_requested.emit()
+
+func _select_job(job_id: String) -> void:
+	selected_job_id = job_id
+	for id in job_buttons.keys():
+		var button := job_buttons[id] as Button
+		var selected := str(id) == selected_job_id
+		var bg := Color(0.08, 0.09, 0.10, 0.96)
+		var border := Color(0.40, 0.46, 0.54, 1.0)
+		if selected:
+			bg = Color(0.14, 0.11, 0.07, 0.98)
+			border = Color(0.92, 0.67, 0.34, 1.0)
+		_style_button(button, bg, border)
+
+func _portrait_color(job_id: String) -> Color:
+	if job_id == "talisman":
+		return Color(0.08, 0.18, 0.14, 1.0)
+	return Color(0.14, 0.14, 0.18, 1.0)
+
+func _play_audio(event_name: String) -> void:
+	if audio_manager != null and audio_manager.has_method("play_event"):
+		audio_manager.call("play_event", event_name)
+
+func _style_button(button: Button, bg: Color, border: Color) -> void:
+	button.add_theme_stylebox_override("normal", _panel_style(bg, border, 8, 2))
+	button.add_theme_stylebox_override("hover", _panel_style(bg.lightened(0.08), border.lightened(0.14), 8, 2))
+	button.add_theme_stylebox_override("pressed", _panel_style(bg.darkened(0.05), border.lightened(0.18), 8, 2))
+	button.add_theme_color_override("font_color", Color(0.94, 0.92, 0.86, 1.0))
+
+func _panel_style(bg: Color, border: Color, radius: int, border_width: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = bg
+	style.border_color = border
+	style.set_border_width_all(border_width)
+	style.corner_radius_top_left = radius
+	style.corner_radius_top_right = radius
+	style.corner_radius_bottom_left = radius
+	style.corner_radius_bottom_right = radius
+	style.content_margin_left = 10
+	style.content_margin_right = 10
+	style.content_margin_top = 8
+	style.content_margin_bottom = 8
+	return style

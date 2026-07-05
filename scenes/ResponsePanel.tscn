@@ -1,0 +1,39 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/ResponsePanel.gd" id="1_response"]
+
+[node name="ResponsePanel" type="PanelContainer"]
+visible = false
+custom_minimum_size = Vector2(620, 260)
+z_index = 80
+script = ExtResource("1_response")
+
+[node name="ResponseLayout" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="EventLabel" type="Label" parent="ResponseLayout"]
+layout_mode = 2
+text = "响应时点"
+autowrap_mode = 3
+
+[node name="ChainLabel" type="Label" parent="ResponseLayout"]
+layout_mode = 2
+text = "当前连锁：无"
+autowrap_mode = 3
+
+[node name="ResponseScroll" type="ScrollContainer" parent="ResponseLayout"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 2
+vertical_scroll_mode = 0
+
+[node name="ResponseContainer" type="HBoxContainer" parent="ResponseLayout/ResponseScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="SkipButton" type="Button" parent="ResponseLayout"]
+custom_minimum_size = Vector2(140, 36)
+layout_mode = 2
+text = "跳过响应"

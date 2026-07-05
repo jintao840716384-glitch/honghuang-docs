@@ -1,0 +1,39 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/CardTooltip.gd" id="1_tooltip"]
+
+[node name="CardTooltip" type="PanelContainer"]
+visible = false
+clip_contents = true
+custom_minimum_size = Vector2(280, 190)
+z_index = 200
+script = ExtResource("1_tooltip")
+
+[node name="TooltipLayout" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="NameLabel" type="Label" parent="TooltipLayout"]
+layout_mode = 2
+text = "卡名"
+autowrap_mode = 3
+
+[node name="TypeLabel" type="Label" parent="TooltipLayout"]
+layout_mode = 2
+text = "类型"
+autowrap_mode = 3
+
+[node name="TagsLabel" type="Label" parent="TooltipLayout"]
+layout_mode = 2
+text = "标签"
+autowrap_mode = 3
+
+[node name="TriggerLabel" type="Label" parent="TooltipLayout"]
+layout_mode = 2
+text = "触发"
+autowrap_mode = 3
+
+[node name="DescriptionLabel" type="Label" parent="TooltipLayout"]
+layout_mode = 2
+text = "效果"
+autowrap_mode = 3

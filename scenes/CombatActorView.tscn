@@ -1,0 +1,60 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/CombatActorView.gd" id="1_actor"]
+
+[node name="CombatActorView" type="PanelContainer"]
+custom_minimum_size = Vector2(238, 286)
+script = ExtResource("1_actor")
+
+[node name="ActorLayout" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 7
+alignment = 1
+
+[node name="NameLabel" type="Label" parent="ActorLayout"]
+layout_mode = 2
+text = "角色"
+horizontal_alignment = 1
+
+[node name="PortraitBox" type="PanelContainer" parent="ActorLayout"]
+custom_minimum_size = Vector2(0, 158)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="PortraitLabel" type="Label" parent="ActorLayout/PortraitBox"]
+layout_mode = 2
+text = "剪影"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HpBar" type="ProgressBar" parent="ActorLayout"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+show_percentage = false
+
+[node name="HpLabel" type="Label" parent="ActorLayout/HpBar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+text = "0 / 0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="StatLabel" type="Label" parent="ActorLayout"]
+layout_mode = 2
+text = "攻 0 / 防 0"
+horizontal_alignment = 1
+
+[node name="ExtraLabel" type="Label" parent="ActorLayout"]
+layout_mode = 2
+text = "资源"
+horizontal_alignment = 1
+
+[node name="IntentLabel" type="Label" parent="ActorLayout"]
+layout_mode = 2
+text = "意图"
+horizontal_alignment = 1

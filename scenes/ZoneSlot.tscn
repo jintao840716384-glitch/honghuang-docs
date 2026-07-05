@@ -1,0 +1,38 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/ZoneSlot.gd" id="1_slot"]
+
+[node name="ZoneSlot" type="Control"]
+custom_minimum_size = Vector2(70, 84)
+script = ExtResource("1_slot")
+
+[node name="GlowLayer" type="Control" parent="."]
+visible = false
+layout_mode = 1
+mouse_filter = 2
+z_index = 0
+
+[node name="GlowOuter" type="Panel" parent="GlowLayer"]
+layout_mode = 0
+mouse_filter = 2
+
+[node name="GlowMiddle" type="Panel" parent="GlowLayer"]
+layout_mode = 0
+mouse_filter = 2
+
+[node name="GlowInner" type="Panel" parent="GlowLayer"]
+layout_mode = 0
+mouse_filter = 2
+
+[node name="CardPanel" type="PanelContainer" parent="."]
+layout_mode = 0
+mouse_filter = 2
+z_index = 1
+
+[node name="CardLabel" type="Label" parent="CardPanel"]
+layout_mode = 2
+mouse_filter = 2
+text = ""
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3

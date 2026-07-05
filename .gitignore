@@ -1,0 +1,14 @@
+# Godot 4+ specific ignores
+.godot/
+.godot_user/
+/android/
+
+# Local test logs and temporary backups
+.godot_test*.log
+backup/
+backups/
+备份/
+
+# Codex/local agent scratch space
+.agents/
+.backup_git/
