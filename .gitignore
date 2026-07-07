@@ -5,6 +5,12 @@
 
 # Local test logs and temporary backups
 .godot_test*.log
+.godot_test_logs/
+prototype_test.log
+layout_test.log
+runflow_test.log
+temp_*.log
+*.lnk
 backup/
 backups/
 备份/

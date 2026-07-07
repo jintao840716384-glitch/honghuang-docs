@@ -30,7 +30,7 @@ func show_card(card: Dictionary, anchor_position: Vector2) -> void:
 	name_label.text = "卡名：%s" % card.get("name", "卡牌")
 	type_label.text = "类型：%s" % _type_text(card)
 	tags_label.text = "标签：%s" % _tags_text(card)
-	trigger_label.text = "触发：%s" % _trigger_text(card)
+	trigger_label.text = "分数：%d / 触发：%s" % [int(card.get("build_cost", card.get("score", 0))), _trigger_text(card)]
 	description_label.text = "效果：%s" % _short_description(card)
 	size = TOOLTIP_SIZE
 	await get_tree().process_frame
@@ -54,6 +54,8 @@ func _type_text(card: Dictionary) -> String:
 		return "防御牌"
 	if str(card.get("after_use", "")) == "equipment":
 		return "装备牌"
+	if str(card.get("after_use", "")) == "spell_zone":
+		return "放置牌"
 	if card_type == CardDatabaseScript.TYPE_SPELL:
 		return "法术牌"
 	return card_type
@@ -85,7 +87,7 @@ func _trigger_label(trigger: String) -> String:
 		"enemy_destroy_zone_card_declared":
 			return "我方法防区卡牌将被破坏前"
 		"player_damage_before":
-			return "玩家受到伤害前"
+			return "我方单位受到伤害前"
 		"player_lethal_damage_before":
 			return "玩家受到致命伤害前"
 	return trigger

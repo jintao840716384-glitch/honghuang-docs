@@ -19,12 +19,19 @@ var is_hovered := false
 var hover_offset := 82.0
 var hover_details_enabled := true
 var hover_motion_enabled := true
+var build_cost_display_enabled := false
+var ownership_text := ""
 
 @onready var card_layout: VBoxContainer = get_node("CardLayout") as VBoxContainer
 @onready var name_label: Label = get_node("CardLayout/NameLabel") as Label
 @onready var type_label: Label = get_node("CardLayout/TypeLabel") as Label
 @onready var divider: ColorRect = get_node("CardLayout/Divider") as ColorRect
 @onready var body_label: Label = get_node("CardLayout/BodyLabel") as Label
+@onready var ownership_label: Label = get_node("CardLayout/OwnershipLabel") as Label
+@onready var score_divider: ColorRect = get_node("CardLayout/ScoreDivider") as ColorRect
+@onready var score_row: HBoxContainer = get_node("CardLayout/ScoreRow") as HBoxContainer
+@onready var score_title_label: Label = get_node("CardLayout/ScoreRow/ScoreTitleLabel") as Label
+@onready var score_value_label: Label = get_node("CardLayout/ScoreRow/ScoreValueLabel") as Label
 
 func _ready() -> void:
 	pressed.connect(_on_pressed)
@@ -45,17 +52,39 @@ func setup(card: Dictionary, prefix := "") -> void:
 	size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	tooltip_text = ""
 
+	var center_text := str(card.get("center_text", ""))
 	var type_text := _type_text(card)
-	if prefix != "":
+	if center_text != "" and prefix != "":
+		type_text = prefix
+	elif prefix != "":
 		type_text = "%s / %s" % [prefix, type_text]
 	var body_text := _body_text(card)
 
 	name_label.text = str(card.get("name", ""))
 	type_label.text = type_text
-	body_label.text = body_text
+	if center_text != "":
+		body_label.text = center_text
+		body_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		body_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	else:
+		body_label.text = body_text
+		body_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		body_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	ownership_label.text = ownership_text
+	ownership_label.visible = ownership_text != ""
+	divider.visible = true
+	score_divider.visible = build_cost_display_enabled
+	score_row.visible = build_cost_display_enabled
+	score_value_label.text = str(int(card.get("build_cost", card.get("score", 0))))
 	name_label.add_theme_font_size_override("font_size", _name_font_size(name_label.text))
 	type_label.add_theme_font_size_override("font_size", _type_font_size(type_text))
-	body_label.add_theme_font_size_override("font_size", _body_font_size(body_text))
+	if center_text != "":
+		body_label.add_theme_font_size_override("font_size", _center_font_size(center_text))
+	else:
+		body_label.add_theme_font_size_override("font_size", _body_font_size(body_text))
+	ownership_label.add_theme_font_size_override("font_size", 12)
+	score_title_label.add_theme_font_size_override("font_size", 12)
+	score_value_label.add_theme_font_size_override("font_size", 30)
 	_apply_card_style(card)
 	_update_pivot()
 	call_deferred("cache_base_position")
@@ -71,6 +100,16 @@ func _ensure_nodes() -> void:
 		divider = get_node("CardLayout/Divider") as ColorRect
 	if body_label == null and has_node("CardLayout/BodyLabel"):
 		body_label = get_node("CardLayout/BodyLabel") as Label
+	if ownership_label == null and has_node("CardLayout/OwnershipLabel"):
+		ownership_label = get_node("CardLayout/OwnershipLabel") as Label
+	if score_divider == null and has_node("CardLayout/ScoreDivider"):
+		score_divider = get_node("CardLayout/ScoreDivider") as ColorRect
+	if score_row == null and has_node("CardLayout/ScoreRow"):
+		score_row = get_node("CardLayout/ScoreRow") as HBoxContainer
+	if score_title_label == null and has_node("CardLayout/ScoreRow/ScoreTitleLabel"):
+		score_title_label = get_node("CardLayout/ScoreRow/ScoreTitleLabel") as Label
+	if score_value_label == null and has_node("CardLayout/ScoreRow/ScoreValueLabel"):
+		score_value_label = get_node("CardLayout/ScoreRow/ScoreValueLabel") as Label
 
 func _on_pressed() -> void:
 	z_index = max(base_z_index + 1000, 1000)
@@ -131,6 +170,8 @@ func _type_text(card: Dictionary) -> String:
 		base = "防御牌"
 	elif after_use == "equipment":
 		base = "装备牌"
+	elif after_use == "spell_zone":
+		base = "放置牌"
 	elif card_type == CardDatabaseScript.TYPE_SPELL:
 		base = "法术牌"
 	var tags: Array = card.get("tags", [])
@@ -169,20 +210,21 @@ func _description_lines(description: String) -> Array:
 	return result
 
 func _footer_text(card: Dictionary) -> String:
+	var parts: Array = []
 	var effect: Dictionary = card.get("effect", {})
 	var sword_cost := int(effect.get("sword_cost", 0))
 	if sword_cost > 0:
-		return "消耗：剑势 %d" % sword_cost
+		parts.append("消耗：剑势 %d" % sword_cost)
 	match str(card.get("after_use", "")):
 		"graveyard":
-			return "去向：墓地"
+			parts.append("去向：墓地")
 		"exile":
-			return "去向：除外"
+			parts.append("去向：除外")
 		"spell_zone":
-			return "放置：法防区"
+			parts.append("放置：法防区")
 		"equipment":
-			return "放置：装备区"
-	return ""
+			parts.append("放置：装备区")
+	return " / ".join(parts)
 
 func _name_font_size(display_text: String) -> int:
 	if display_text.length() >= 6:
@@ -201,6 +243,13 @@ func _body_font_size(display_text: String) -> int:
 		return 11
 	return 12
 
+func _center_font_size(display_text: String) -> int:
+	if display_text.length() <= 2:
+		return 58
+	if display_text.length() <= 4:
+		return 48
+	return 40
+
 func _apply_card_style(card: Dictionary) -> void:
 	var card_type := str(card.get("type", ""))
 	var after_use := str(card.get("after_use", ""))
@@ -215,6 +264,14 @@ func _apply_card_style(card: Dictionary) -> void:
 		bg = Color(0.09, 0.22, 0.16, 1.0)
 		border = Color(0.40, 0.82, 0.52, 1.0)
 		name_color = Color(0.76, 1.0, 0.82, 1.0)
+	elif after_use == "spell_zone":
+		bg = Color(0.18, 0.17, 0.13, 1.0)
+		border = Color(0.84, 0.72, 0.42, 1.0)
+		name_color = Color(1.0, 0.90, 0.64, 1.0)
+	elif card_type == "奖励":
+		bg = Color(0.23, 0.17, 0.11, 1.0)
+		border = Color(0.92, 0.66, 0.36, 1.0)
+		name_color = Color(1.0, 0.90, 0.70, 1.0)
 	add_theme_stylebox_override("normal", _make_style(bg, border, 2))
 	add_theme_stylebox_override("hover", _make_style(bg.lightened(0.08), border.lightened(0.15), 3))
 	add_theme_stylebox_override("pressed", _make_style(bg.darkened(0.05), border.lightened(0.25), 3))
@@ -225,8 +282,15 @@ func _apply_card_style(card: Dictionary) -> void:
 	add_theme_color_override("font_disabled_color", Color(0, 0, 0, 0))
 	name_label.add_theme_color_override("font_color", name_color)
 	type_label.add_theme_color_override("font_color", Color(0.84, 0.84, 0.78, 1.0))
-	body_label.add_theme_color_override("font_color", Color(0.94, 0.92, 0.84, 1.0))
+	if str(card.get("center_text", "")) != "":
+		body_label.add_theme_color_override("font_color", name_color)
+	else:
+		body_label.add_theme_color_override("font_color", Color(0.94, 0.92, 0.84, 1.0))
+	ownership_label.add_theme_color_override("font_color", Color(0.84, 0.86, 0.78, 1.0))
 	divider.color = border.darkened(0.10)
+	score_divider.color = border.darkened(0.10)
+	score_title_label.add_theme_color_override("font_color", Color(0.86, 0.84, 0.76, 1.0))
+	score_value_label.add_theme_color_override("font_color", name_color)
 
 func _make_style(bg: Color, border: Color, border_width: int) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()

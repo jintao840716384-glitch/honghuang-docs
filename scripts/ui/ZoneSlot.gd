@@ -14,6 +14,8 @@ var occupied := false
 var face_down := false
 var response_available := false
 var response_selected := false
+var drop_available := false
+var drop_selected := false
 var glow_tween: Tween
 var pulse_tween: Tween
 var glow_base_alpha := 0.42
@@ -51,6 +53,8 @@ func setup(card: Dictionary = {}) -> void:
 	face_down = bool(card.get("face_down", false)) if occupied else false
 	response_available = false
 	response_selected = false
+	drop_available = false
+	drop_selected = false
 	if custom_minimum_size == Vector2.ZERO:
 		custom_minimum_size = DEFAULT_SLOT_SIZE
 	if card.is_empty():
@@ -63,15 +67,36 @@ func setup(card: Dictionary = {}) -> void:
 	if face_down:
 		card_label.text = "卡背"
 	else:
-		card_label.text = str(card.get("name", "卡牌"))
+		card_label.text = _zone_card_label(card)
 	tooltip_text = ""
 	_apply_style()
 	_sync_response_glow()
 	call_deferred("_sync_visual_layout")
 
+func _zone_card_label(card: Dictionary) -> String:
+	var lines: Array = [str(card.get("name", "卡牌"))]
+	var markers: Array = []
+	if card.has("zone_countdown"):
+		markers.append("倒%d" % int(card.get("zone_countdown", 0)))
+	if card.has("zone_uses_remaining"):
+		markers.append("余%d" % int(card.get("zone_uses_remaining", 0)))
+	var attached_cards: Array = card.get("attached_cards", [])
+	var attached_count: int = attached_cards.size()
+	if attached_count > 0:
+		markers.append("压%d" % attached_count)
+	if not markers.is_empty():
+		lines.append(" / ".join(markers))
+	return "\n".join(lines)
+
 func set_response_available(available: bool, selected: bool = false) -> void:
 	response_available = available and occupied
 	response_selected = selected and response_available
+	_apply_style()
+	_sync_response_glow()
+
+func set_drop_available(available: bool, selected: bool = false) -> void:
+	drop_available = available
+	drop_selected = selected and drop_available
 	_apply_style()
 	_sync_response_glow()
 
@@ -134,7 +159,9 @@ func _apply_style() -> void:
 		style.border_color = Color(0.84, 0.72, 0.42, 1.0)
 	if response_available:
 		style.border_color = Color(1.0, 0.92, 0.58, 1.0) if response_selected else Color(0.78, 0.86, 1.0, 1.0)
-	style.set_border_width_all(3 if response_available else 2)
+	elif drop_available:
+		style.border_color = Color(1.0, 0.94, 0.62, 1.0) if drop_selected else Color(0.88, 0.94, 1.0, 1.0)
+	style.set_border_width_all(3 if response_available or drop_available else 2)
 	style.corner_radius_top_left = 6
 	style.corner_radius_top_right = 6
 	style.corner_radius_bottom_left = 6
@@ -147,17 +174,19 @@ func _sync_response_glow() -> void:
 	_ensure_nodes()
 	if glow_tween != null and glow_tween.is_running():
 		glow_tween.kill()
-	if not response_available:
+	if not response_available and not drop_available:
 		glow_layer.visible = false
 		glow_layer.modulate.a = 0.0
 		glow_layer.scale = Vector2.ONE
 		return
 	var glow_color := Color(1.0, 0.88, 0.48, 1.0) if response_selected else Color(0.74, 0.86, 1.0, 1.0)
+	if drop_available and not response_available:
+		glow_color = Color(1.0, 0.94, 0.62, 1.0) if drop_selected else Color(0.88, 0.94, 1.0, 1.0)
 	_apply_glow_styles(glow_color)
-	glow_base_alpha = 0.54 if response_selected else 0.36
-	glow_peak_alpha = 0.90 if response_selected else 0.66
+	glow_base_alpha = 0.54 if response_selected or drop_selected else 0.36
+	glow_peak_alpha = 0.90 if response_selected or drop_selected else 0.66
 	glow_base_scale = 0.94
-	glow_peak_scale = 1.15 if response_selected else 1.10
+	glow_peak_scale = 1.15 if response_selected or drop_selected else 1.10
 	glow_layer.visible = true
 	_set_glow_phase(0.0)
 	glow_tween = create_tween()

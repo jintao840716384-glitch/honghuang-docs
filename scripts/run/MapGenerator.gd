@@ -10,25 +10,26 @@ static func generate() -> Array:
 		],
 		[
 			{"lane": -0.6, "type": "normal"},
-			{"lane": 0.8, "type": "normal"}
+			{"lane": 0.8, "type": "event"}
 		],
 		[
 			{"lane": -1.1, "type": "normal"},
 			{"lane": 0.0, "type": "elite"},
-			{"lane": 1.1, "type": "normal"}
+			{"lane": 1.1, "type": "shop"}
 		],
 		[
-			{"lane": -0.7, "type": "normal"},
+			{"lane": -0.7, "type": "event"},
+			{"lane": 0.0, "type": "treasure"},
 			{"lane": 0.7, "type": "elite"}
 		],
 		[
 			{"lane": -1.0, "type": "elite"},
-			{"lane": 0.0, "type": "normal"},
+			{"lane": 0.0, "type": "rest"},
 			{"lane": 1.0, "type": "normal"}
 		],
 		[
 			{"lane": -0.55, "type": "elite"},
-			{"lane": 0.55, "type": "normal"}
+			{"lane": 0.55, "type": "event"}
 		],
 		[
 			{"lane": 0.0, "type": "boss"}
@@ -90,4 +91,12 @@ static func _title_for_type(node_type: String) -> String:
 			return "精英"
 		"boss":
 			return "首领"
+		"event":
+			return "事件"
+		"treasure":
+			return "宝箱"
+		"shop":
+			return "坊市"
+		"rest":
+			return "休息"
 	return "战斗"

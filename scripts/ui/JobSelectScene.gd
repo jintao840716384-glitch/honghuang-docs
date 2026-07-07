@@ -4,14 +4,18 @@ signal job_selected(job_id: String)
 signal back_requested
 
 const JobDatabaseScript = preload("res://scripts/data/JobDatabase.gd")
+const MetaProgressionScript = preload("res://scripts/data/MetaProgression.gd")
 const AudioManagerScript = preload("res://scripts/audio/AudioManager.gd")
 
 var selected_job_id := "sword"
 var job_buttons: Dictionary = {}
 var confirm_button: Button
 var audio_manager: Node
+var progression
 
 func _ready() -> void:
+	progression = MetaProgressionScript.new()
+	progression.load()
 	_build_scene()
 	audio_manager = AudioManagerScript.new()
 	add_child(audio_manager)
@@ -44,7 +48,7 @@ func _build_scene() -> void:
 	header.add_child(back_button)
 
 	var title := Label.new()
-	title.text = "选择职业"
+	title.text = "选择角色"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -53,7 +57,7 @@ func _build_scene() -> void:
 	header.add_child(title)
 
 	var header_spacer := Control.new()
-	header_spacer.custom_minimum_size = Vector2(84.0, 1.0)
+	header_spacer.custom_minimum_size = Vector2(120.0, 36.0)
 	header.add_child(header_spacer)
 
 	var job_row := HBoxContainer.new()
@@ -70,7 +74,7 @@ func _build_scene() -> void:
 		job_row.add_child(button)
 
 	confirm_button = Button.new()
-	confirm_button.text = "确认选择"
+	confirm_button.text = "确认角色"
 	confirm_button.custom_minimum_size = Vector2(180.0, 44.0)
 	confirm_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	confirm_button.pressed.connect(_on_confirm_pressed)
@@ -86,6 +90,7 @@ func _create_job_card(job: Dictionary) -> Button:
 	button.focus_mode = Control.FOCUS_NONE
 
 	var layout := VBoxContainer.new()
+	layout.name = "CardLayout"
 	layout.set_anchors_preset(Control.PRESET_FULL_RECT)
 	layout.offset_left = 18.0
 	layout.offset_top = 18.0
@@ -103,11 +108,20 @@ func _create_job_card(job: Dictionary) -> Button:
 	layout.add_child(name_label)
 
 	var stat_label := Label.new()
-	stat_label.text = "生命 %d    攻 %d / 防 %d" % [int(job.get("max_hp", 0)), int(job.get("attack", 0)), int(job.get("defense", 0))]
+	stat_label.name = "StatLabel"
+	stat_label.text = _job_stat_text(job)
 	stat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	stat_label.add_theme_font_size_override("font_size", 15)
 	stat_label.add_theme_color_override("font_color", Color(0.82, 0.86, 0.90, 1.0))
 	layout.add_child(stat_label)
+
+	var progress_label := Label.new()
+	progress_label.name = "ProgressLabel"
+	progress_label.text = _job_progress_text(str(job.get("id", "")))
+	progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	progress_label.add_theme_font_size_override("font_size", 14)
+	progress_label.add_theme_color_override("font_color", Color(0.72, 0.84, 0.74, 1.0))
+	layout.add_child(progress_label)
 
 	var portrait := Panel.new()
 	portrait.custom_minimum_size = Vector2(1.0, 170.0)
@@ -133,6 +147,20 @@ func _create_job_card(job: Dictionary) -> Button:
 	layout.add_child(desc_label)
 
 	return button
+
+func _job_stat_text(job: Dictionary) -> String:
+	var job_id := str(job.get("id", ""))
+	var bonuses: Dictionary = progression.bonuses_for_job(job_id) if progression != null else {}
+	var max_hp: int = int(job.get("max_hp", 0)) + int(bonuses.get("max_hp", 0))
+	var attack: int = int(job.get("attack", 0)) + int(bonuses.get("attack", 0))
+	var defense: int = int(job.get("defense", 0)) + int(bonuses.get("defense", 0))
+	var deck_score_bonus: int = int(bonuses.get("deck_score_limit", 0))
+	return "生命 %d    攻 %d / 防 %d    总分 +%d" % [max_hp, attack, defense, deck_score_bonus]
+
+func _job_progress_text(job_id: String) -> String:
+	if progression == null:
+		return "修为点 0"
+	return "修为点 %d / 累计 %d" % [progression.points_available(job_id), progression.points_total(job_id)]
 
 func _on_job_card_pressed(job_id: String) -> void:
 	_play_audio("ui_click")

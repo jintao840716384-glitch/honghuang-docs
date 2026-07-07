@@ -13,6 +13,6 @@ func _play() -> void:
 	position -= Vector2(size.x * 0.5, 0)
 	var tween := create_tween()
 	tween.set_parallel(true)
-	tween.tween_property(self, "position:y", position.y - 42.0, 0.75).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tween.tween_property(self, "modulate:a", 0.0, 0.75).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tween.tween_property(self, "position:y", position.y - 48.0, 1.18).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_property(self, "modulate:a", 0.0, 1.18).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	tween.finished.connect(queue_free)

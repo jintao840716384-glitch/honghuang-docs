@@ -56,14 +56,14 @@ offset_top = 190.0
 offset_right = 119.0
 offset_bottom = 476.0
 
-[node name="SpellDefenseZone" type="VBoxContainer" parent="."]
+[node name="SpellDefenseZone" type="HBoxContainer" parent="."]
 layout_mode = 1
-anchor_left = 0.3
-anchor_right = 0.3
-offset_left = -20.0
-offset_top = 160.0
-offset_right = 56.0
-offset_bottom = 624.0
+anchor_left = 0.18
+anchor_right = 0.18
+offset_left = -205.0
+offset_top = 552.0
+offset_right = 205.0
+offset_bottom = 640.0
 theme_override_constants/separation = 5
 alignment = 1
 
@@ -107,21 +107,24 @@ text = "取消"
 
 [node name="ActionRow" type="HBoxContainer" parent="."]
 layout_mode = 1
-anchor_left = 0.2
-anchor_right = 0.2
-offset_left = -118.0
-offset_top = 506.0
-offset_right = 160.0
-offset_bottom = 546.0
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 26.0
+offset_top = -230.0
+offset_right = 186.0
+offset_bottom = -174.0
+grow_vertical = 0
 theme_override_constants/separation = 8
 
 [node name="NormalAttackButton" type="Button" parent="ActionRow"]
+visible = false
 custom_minimum_size = Vector2(104, 36)
 layout_mode = 2
 text = "普通攻击"
 
 [node name="EndTurnButton" type="Button" parent="ActionRow"]
-custom_minimum_size = Vector2(104, 36)
+custom_minimum_size = Vector2(156, 50)
 layout_mode = 2
 text = "结束回合"
 
@@ -288,10 +291,10 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -300.0
-offset_top = -150.0
-offset_right = 300.0
-offset_bottom = 160.0
+offset_left = -390.0
+offset_top = -230.0
+offset_right = 390.0
+offset_bottom = 215.0
 grow_horizontal = 2
 grow_vertical = 2
 z_index = 75
@@ -321,7 +324,7 @@ offset_bottom = -42.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-text = "连锁"
+text = "发动盖伏卡"
 horizontal_alignment = 1
 vertical_alignment = 1
 
@@ -339,7 +342,7 @@ offset_bottom = -6.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-text = "响应时点"
+text = "可发动放置区中发光的盖伏卡"
 horizontal_alignment = 1
 vertical_alignment = 1
 
@@ -357,7 +360,7 @@ offset_right = 68.0
 offset_bottom = 50.0
 grow_horizontal = 2
 grow_vertical = 2
-text = "结束连锁"
+text = "结束发动"
 
 [node name="ResponseConfirmPanel" type="PanelContainer" parent="."]
 visible = false
