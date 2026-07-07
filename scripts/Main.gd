@@ -7,15 +7,28 @@ const MapScene = preload("res://scenes/MapScene.tscn")
 const BattleScene = preload("res://scenes/BattleScene.tscn")
 const RunSettlementScene = preload("res://scenes/RunSettlementScene.tscn")
 const RunStateScript = preload("res://scripts/run/RunState.gd")
+const InputSettingsScript = preload("res://scripts/settings/InputSettings.gd")
+const DisplayModeManagerScript = preload("res://scripts/settings/DisplayModeManager.gd")
+const MusicManagerScript = preload("res://scripts/audio/MusicManager.gd")
+const SettingsStoreScript = preload("res://scripts/settings/SettingsStore.gd")
+const GameSettingsScript = preload("res://scripts/settings/GameSettings.gd")
 
 var current_scene: Node
+var music_manager: Node
 var run_state
 var active_node_id := ""
 
 func _ready() -> void:
+	var settings: Dictionary = SettingsStoreScript.load_settings()
+	InputSettingsScript.apply_bindings(InputSettingsScript.settings_bindings(settings))
+	DisplayModeManagerScript.apply_display_settings(settings)
+	music_manager = MusicManagerScript.new()
+	add_child(music_manager)
+	_apply_music_settings(settings)
 	show_main_menu()
 
 func show_main_menu() -> void:
+	_play_music("music.main_menu")
 	_clear_current_scene()
 	run_state = null
 	active_node_id = ""
@@ -23,8 +36,11 @@ func show_main_menu() -> void:
 	add_child(current_scene)
 	current_scene.start_requested.connect(show_job_select)
 	current_scene.quit_requested.connect(_on_quit_requested)
+	if current_scene.has_signal("settings_changed"):
+		current_scene.settings_changed.connect(_on_settings_changed)
 
 func show_job_select() -> void:
+	_play_music("music.main_menu")
 	_clear_current_scene()
 	current_scene = JobSelectScene.instantiate()
 	add_child(current_scene)
@@ -33,6 +49,7 @@ func show_job_select() -> void:
 		current_scene.back_requested.connect(show_main_menu)
 
 func show_map() -> void:
+	_play_music("music.main_menu")
 	_clear_current_scene()
 	current_scene = MapScene.instantiate()
 	add_child(current_scene)
@@ -71,55 +88,51 @@ func _on_prep_start_requested(job_id: String, deck_ids: Array = [], reserve_ids:
 func _on_map_node_selected(node_data: Dictionary) -> void:
 	if run_state == null:
 		return
-	active_node_id = str(node_data.get("id", ""))
-	if not run_state.is_node_available(active_node_id):
-		return
-	var block_reason: String = run_state.battle_start_block_reason()
-	if block_reason != "":
-		run_state.status_message = block_reason
+	var payload: Dictionary = run_state.battle_start_payload(str(node_data.get("id", "")))
+	if not bool(payload.get("success", false)):
+		var message: String = str(payload.get("message", ""))
+		if message != "":
+			run_state.status_message = message
 		if current_scene != null and current_scene.has_method("setup"):
 			current_scene.setup(run_state)
 		return
-	run_state.begin_node(active_node_id)
+	active_node_id = str(payload.get("node_id", ""))
+	_play_music("music.battle")
 	_clear_current_scene()
 	current_scene = BattleScene.instantiate()
 	add_child(current_scene)
 	current_scene.map_battle_completed.connect(_on_map_battle_completed)
 	current_scene.run_abandoned.connect(_on_run_abandoned)
 	current_scene.setup_run_battle(
-		run_state.job_id,
-		run_state.deck_ids,
-		run_state.battle_number_for_node(node_data),
-		str(node_data.get("type", "normal")),
-		run_state.run_context(),
-		run_state.battle_spirit_reward(node_data)
+		str(payload.get("job_id", "")),
+		(payload.get("deck_ids", []) as Array),
+		int(payload.get("battle_number", 1)),
+		str(payload.get("encounter_type", "normal")),
+		(payload.get("run_context", {}) as Dictionary),
+		int(payload.get("spirit_reward", 0))
 	)
 
 func _on_map_battle_completed(deck_ids: Array, reserve_ids: Array, player_hp: int, player_max_hp: int) -> void:
 	if run_state == null:
 		show_main_menu()
 		return
-	var completed_node: Dictionary = run_state.get_node_data(active_node_id)
-	run_state.update_deck(deck_ids)
-	run_state.update_reserve(reserve_ids)
-	run_state.update_life(player_hp, player_max_hp)
-	var stone_reward: int = run_state.battle_spirit_reward(completed_node)
-	run_state.add_spirit_stones(stone_reward)
-	run_state.complete_node(active_node_id)
-	if str(completed_node.get("type", "")) == "boss":
-		if not run_state.advance_to_next_story_layer():
-			var settlement: Dictionary = run_state.finish_run_and_save_progression()
-			active_node_id = ""
-			show_run_settlement(settlement)
-			return
-	else:
-		run_state.status_message = "战斗胜利，继续选择下一个节点。"
+	var result: Dictionary = run_state.apply_battle_completion(active_node_id, deck_ids, reserve_ids, player_hp, player_max_hp)
+	if not bool(result.get("success", false)):
+		run_state.status_message = str(result.get("message", "战斗回流失败。"))
+		active_node_id = ""
+		show_map()
+		return
+	if str(result.get("flow", "map")) == "settlement":
+		var settlement: Dictionary = (result.get("settlement", {}) as Dictionary)
+		active_node_id = ""
+		show_run_settlement(settlement)
+		return
 	active_node_id = ""
 	show_map()
 
 func _on_run_abandoned() -> void:
 	if run_state != null:
-		var settlement: Dictionary = run_state.finish_run_and_save_progression(true, false)
+		var settlement: Dictionary = run_state.abandon_run()
 		active_node_id = ""
 		show_run_settlement(settlement)
 	else:
@@ -147,6 +160,21 @@ func _on_settlement_retry_requested() -> void:
 
 func _on_quit_requested() -> void:
 	get_tree().quit()
+
+func _on_settings_changed(settings: Dictionary) -> void:
+	InputSettingsScript.apply_bindings(InputSettingsScript.settings_bindings(settings))
+	DisplayModeManagerScript.apply_display_settings(settings)
+	_apply_music_settings(settings)
+
+func _apply_music_settings(settings: Dictionary) -> void:
+	if music_manager == null:
+		return
+	var audio: Dictionary = GameSettingsScript.audio_settings(settings)
+	music_manager.set_music_volume(float(audio.get("music_volume", GameSettingsScript.DEFAULT_MUSIC_VOLUME)))
+
+func _play_music(event_id: String) -> void:
+	if music_manager != null:
+		music_manager.play_music(event_id)
 
 func _clear_current_scene() -> void:
 	if current_scene != null:

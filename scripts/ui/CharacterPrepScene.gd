@@ -5,8 +5,12 @@ signal back_requested
 
 const JobDatabaseScript = preload("res://scripts/data/JobDatabase.gd")
 const MetaProgressionScript = preload("res://scripts/data/MetaProgression.gd")
-const CardDatabaseScript = preload("res://scripts/data/CardDatabase.gd")
-const CardButtonScene = preload("res://scenes/CardButton.tscn")
+const ProgressionDatabaseScript = preload("res://scripts/data/ProgressionDatabase.gd")
+const CardPoolDatabaseScript = preload("res://scripts/data/CardPoolDatabase.gd")
+const DeckBuildRulesScript = preload("res://scripts/run/DeckBuildRules.gd")
+const UIStyleFactoryScript = preload("res://scripts/ui/UIStyleFactory.gd")
+const DeckBuilderViewFactoryScript = preload("res://scripts/ui/DeckBuilderViewFactory.gd")
+const CharacterVisualDatabaseScript = preload("res://scripts/assets/CharacterVisualDatabase.gd")
 const CARD_UNLOCK_UPGRADE_ID := "card_unlock"
 const BASE_DECK_SCORE_LIMIT := 20
 const GROWTH_CATEGORY_ORDER := ["基础属性", "卡组与卡包", "角色特性", "强力规则"]
@@ -15,6 +19,7 @@ var selected_job_id := "sword"
 var progression
 var title_label: Label
 var subtitle_label: Label
+var portrait_panel: Panel
 var portrait_label: Label
 var stat_label: Label
 var points_label: Label
@@ -78,12 +83,12 @@ func _build_scene() -> void:
 	subtitle_label.add_theme_color_override("font_color", Color(0.74, 0.80, 0.82, 1.0))
 	left.add_child(subtitle_label)
 
-	var portrait := Panel.new()
-	portrait.name = "CharacterPortrait"
-	portrait.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	portrait.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	portrait.add_theme_stylebox_override("panel", _panel_style(Color(0.10, 0.12, 0.15, 1.0), Color(0.48, 0.54, 0.60, 1.0), 8, 1))
-	left.add_child(portrait)
+	portrait_panel = Panel.new()
+	portrait_panel.name = "CharacterPortrait"
+	portrait_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	portrait_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	portrait_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.10, 0.12, 0.15, 1.0), Color(0.48, 0.54, 0.60, 1.0), 8, 1))
+	left.add_child(portrait_panel)
 
 	portrait_label = Label.new()
 	portrait_label.name = "CharacterPortraitLabel"
@@ -92,7 +97,7 @@ func _build_scene() -> void:
 	portrait_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	portrait_label.add_theme_font_size_override("font_size", 34)
 	portrait_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.94, 1.0))
-	portrait.add_child(portrait_label)
+	portrait_panel.add_child(portrait_label)
 
 	var info_panel := PanelContainer.new()
 	info_panel.name = "CharacterInfoPanel"
@@ -172,6 +177,7 @@ func _refresh(message: String = "") -> void:
 	title_label.text = job_name
 	subtitle_label.text = title_text
 	portrait_label.text = job_name
+	_apply_portrait_visual(job)
 	stat_label.text = "生命 %d    攻 %d / 防 %d    基础抽牌 %d    卡组总分上限 %d" % [max_hp, attack, defense, draw_count, deck_score_limit]
 	points_label.text = "修为点：可用 %d    累计 %d" % [
 		progression.points_available(selected_job_id),
@@ -327,7 +333,7 @@ func _growth_summary_text() -> String:
 
 func _group_growth_upgrades() -> Dictionary:
 	var grouped: Dictionary = {}
-	for definition_variant in MetaProgressionScript.upgrades_for_job(selected_job_id):
+	for definition_variant in ProgressionDatabaseScript.upgrades_for_job(selected_job_id):
 		var definition: Dictionary = definition_variant
 		var category := str(definition.get("category", "其他"))
 		if not grouped.has(category):
@@ -368,7 +374,7 @@ func _upgrade_cost_text(cost: int) -> String:
 func _on_pack_pressed() -> void:
 	overlay_title_label.text = "卡包解锁"
 	var unlock_level: int = progression.upgrade_level(selected_job_id, CARD_UNLOCK_UPGRADE_ID)
-	var unlock_definition: Dictionary = MetaProgressionScript.upgrade_definition(selected_job_id, CARD_UNLOCK_UPGRADE_ID)
+	var unlock_definition: Dictionary = ProgressionDatabaseScript.upgrade_definition(selected_job_id, CARD_UNLOCK_UPGRADE_ID)
 	var unlock_max_level: int = int(unlock_definition.get("max_level", 0))
 	var available_points: int = progression.points_available(selected_job_id)
 	overlay_message_label.text = "识藏 %d/%d    可用修为点 %d\n当前奖励、事件、宝箱和坊市只会从已开放卡包中抽取。" % [
@@ -377,12 +383,12 @@ func _on_pack_pressed() -> void:
 		available_points
 	]
 	_clear_children(overlay_content)
-	var unlocked_packs: Array = CardDatabaseScript.unlocked_packs_for_job(selected_job_id, _unlock_tier())
-	var pack_counts: Dictionary = CardDatabaseScript.pack_card_counts_for_job(selected_job_id)
-	for pack_id_variant in CardDatabaseScript.pack_ids_for_job(selected_job_id):
+	var unlocked_packs: Array = CardPoolDatabaseScript.unlocked_packs_for_job(selected_job_id, _unlock_tier())
+	var pack_counts: Dictionary = CardPoolDatabaseScript.pack_card_counts_for_job(selected_job_id)
+	for pack_id_variant in CardPoolDatabaseScript.pack_ids_for_job(selected_job_id):
 		var pack_id := str(pack_id_variant)
 		var state := "已开放" if unlocked_packs.has(pack_id) else "未开放"
-		_add_text_row(CardDatabaseScript.pack_display_name(pack_id), "%s    %d 张" % [state, int(pack_counts.get(pack_id, 0))])
+		_add_text_row(CardPoolDatabaseScript.pack_display_name(pack_id), "%s    %d 张" % [state, int(pack_counts.get(pack_id, 0))])
 	var next_summary := _next_pack_summary()
 	_add_text_row("下一批", next_summary)
 	var unlock_cost: int = progression.next_upgrade_cost(selected_job_id, CARD_UNLOCK_UPGRADE_ID)
@@ -401,7 +407,7 @@ func _on_deck_pressed() -> void:
 
 func _refresh_prep_deck_builder(message := "") -> void:
 	_clear_children(overlay_content)
-	var score: int = CardDatabaseScript.deck_score(prep_deck_ids)
+	var score: int = DeckBuildRulesScript.deck_score(prep_deck_ids)
 	var reason: String = _deck_build_block_reason(prep_deck_ids)
 	var parts: Array = []
 	if message != "":
@@ -412,8 +418,8 @@ func _refresh_prep_deck_builder(message := "") -> void:
 		parts.append("当前构筑可用于开始挑战。")
 	overlay_message_label.text = "卡组 %d/%d-%d    卡组总分 %d/%d\n%s" % [
 		prep_deck_ids.size(),
-		CardDatabaseScript.MIN_DECK_SIZE,
-		CardDatabaseScript.MAX_DECK_SIZE,
+		DeckBuildRulesScript.min_deck_size(),
+		DeckBuildRulesScript.max_deck_size(),
 		score,
 		_deck_score_limit(),
 		"  ".join(parts)
@@ -453,42 +459,15 @@ func _refresh_prep_deck_builder(message := "") -> void:
 		_add_prep_builder_card(prep_builder_reserve_container, str(prep_reserve_ids[i]), "加入", "reserve", i)
 
 func _create_prep_deck_column(column_title: String, container_name: String) -> Dictionary:
-	var panel := PanelContainer.new()
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.060, 0.066, 0.072, 0.95), Color(0.30, 0.35, 0.40, 1.0), 8, 1))
-
-	var layout := VBoxContainer.new()
-	layout.add_theme_constant_override("separation", 8)
-	panel.add_child(layout)
-
-	var title := Label.new()
-	title.text = column_title
-	title.add_theme_font_size_override("font_size", 18)
-	title.add_theme_color_override("font_color", Color(0.94, 0.90, 0.78, 1.0))
-	layout.add_child(title)
-
-	var container := GridContainer.new()
-	container.name = container_name
-	container.columns = 3
-	container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	container.add_theme_constant_override("h_separation", 10)
-	container.add_theme_constant_override("v_separation", 10)
-	layout.add_child(container)
-
-	return {"panel": panel, "container": container}
+	return DeckBuilderViewFactoryScript.create_column(
+		column_title,
+		container_name,
+		_panel_style(Color(0.060, 0.066, 0.072, 0.95), Color(0.30, 0.35, 0.40, 1.0), 8, 1),
+		false
+	)
 
 func _add_prep_builder_card(parent: GridContainer, card_id: String, prefix: String, source: String, index: int) -> void:
-	var card: Dictionary = CardDatabaseScript.get_card(card_id)
-	if card.is_empty():
-		return
-	var button: CardButton = CardButtonScene.instantiate()
-	button.build_cost_display_enabled = true
-	button.setup(card, prefix)
-	button.hover_details_enabled = false
-	button.hover_motion_enabled = false
-	button.card_pressed.connect(_on_prep_builder_card_pressed.bind(source, index))
-	parent.add_child(button)
+	DeckBuilderViewFactoryScript.add_builder_card(parent, card_id, prefix, _on_prep_builder_card_pressed.bind(source, index))
 
 func _on_prep_builder_card_pressed(_uid: String, source: String, index: int) -> void:
 	if source == "deck":
@@ -502,8 +481,8 @@ func _on_prep_builder_card_pressed(_uid: String, source: String, index: int) -> 
 	if index < 0 or index >= prep_reserve_ids.size():
 		return
 	var reserve_card_id := str(prep_reserve_ids[index])
-	if not CardDatabaseScript.can_add_card_to_deck(reserve_card_id, prep_deck_ids, _deck_score_limit()):
-		_refresh_prep_deck_builder("无法加入：%s。" % CardDatabaseScript.deck_add_block_reason(reserve_card_id, prep_deck_ids, _deck_score_limit()))
+	if not DeckBuildRulesScript.can_add_card_to_deck(reserve_card_id, prep_deck_ids, _deck_score_limit()):
+		_refresh_prep_deck_builder("无法加入：%s。" % DeckBuildRulesScript.deck_add_block_reason(reserve_card_id, prep_deck_ids, _deck_score_limit()))
 		return
 	prep_reserve_ids.remove_at(index)
 	prep_deck_ids.append(reserve_card_id)
@@ -586,18 +565,18 @@ func _on_back_pressed() -> void:
 
 func _pack_summary() -> String:
 	var names: Array = []
-	for pack_variant in CardDatabaseScript.unlocked_packs_for_job(selected_job_id, _unlock_tier()):
-		names.append(CardDatabaseScript.pack_display_name(str(pack_variant)))
+	for pack_variant in CardPoolDatabaseScript.unlocked_packs_for_job(selected_job_id, _unlock_tier()):
+		names.append(CardPoolDatabaseScript.pack_display_name(str(pack_variant)))
 	return "、".join(names)
 
 func _next_pack_summary() -> String:
-	var current_packs: Array = CardDatabaseScript.unlocked_packs_for_job(selected_job_id, _unlock_tier())
-	var next_packs: Array = CardDatabaseScript.unlocked_packs_for_job(selected_job_id, _unlock_tier() + 1)
+	var current_packs: Array = CardPoolDatabaseScript.unlocked_packs_for_job(selected_job_id, _unlock_tier())
+	var next_packs: Array = CardPoolDatabaseScript.unlocked_packs_for_job(selected_job_id, _unlock_tier() + 1)
 	var names: Array = []
 	for pack_variant in next_packs:
 		var pack_id := str(pack_variant)
 		if not current_packs.has(pack_id):
-			names.append(CardDatabaseScript.pack_display_name(pack_id))
+			names.append(CardPoolDatabaseScript.pack_display_name(pack_id))
 	if names.is_empty():
 		return "暂无下一批"
 	return "、".join(names)
@@ -664,11 +643,11 @@ func _starting_pool_order(default_deck: Array) -> Array:
 
 func _unlocked_starting_pool() -> Array:
 	var result: Array = []
-	var pool: Array = CardDatabaseScript.common_pool()
-	pool.append_array(CardDatabaseScript.job_pool(selected_job_id))
+	var pool: Array = CardPoolDatabaseScript.common_pool()
+	pool.append_array(CardPoolDatabaseScript.job_pool(selected_job_id))
 	for card_id_variant in pool:
 		var card_id := str(card_id_variant)
-		if CardDatabaseScript.card_unlocked_for_job(card_id, selected_job_id, _unlock_tier()) and not result.has(card_id):
+		if CardPoolDatabaseScript.card_unlocked_for_job(card_id, selected_job_id, _unlock_tier()) and not result.has(card_id):
 			result.append(card_id)
 	return result
 
@@ -684,13 +663,14 @@ func _deck_score_limit() -> int:
 	return BASE_DECK_SCORE_LIMIT + int(bonuses.get("deck_score_limit", 0))
 
 func _deck_build_block_reason(candidate_deck_ids: Array) -> String:
-	if candidate_deck_ids.size() < CardDatabaseScript.MIN_DECK_SIZE:
-		return "当前卡组至少需要 %d 张。" % CardDatabaseScript.MIN_DECK_SIZE
-	if candidate_deck_ids.size() > CardDatabaseScript.MAX_DECK_SIZE:
-		return "当前卡组不能超过 %d 张。" % CardDatabaseScript.MAX_DECK_SIZE
-	if _deck_score_limit() > 0 and CardDatabaseScript.deck_score(candidate_deck_ids) > _deck_score_limit():
-		return "当前卡组总分超过上限。"
-	return ""
+	return DeckBuildRulesScript.deck_build_block_reason(candidate_deck_ids, _deck_score_limit())
+
+func _apply_portrait_visual(job: Dictionary) -> void:
+	if portrait_panel == null:
+		return
+	var profile: Dictionary = CharacterVisualDatabaseScript.profile_for_unit_data(job)
+	var bg := profile.get("placeholder_color", Color(0.10, 0.12, 0.15, 1.0)) as Color
+	portrait_panel.add_theme_stylebox_override("panel", _panel_style(bg, Color(0.48, 0.54, 0.60, 1.0), 8, 1))
 
 func _make_info_label(node_name: String) -> Label:
 	var label := Label.new()
@@ -710,25 +690,10 @@ func _make_action_button(label: String, bg: Color, border: Color) -> Button:
 	return button
 
 func _style_button(button: Button, bg: Color, border: Color) -> void:
-	button.add_theme_stylebox_override("normal", _panel_style(bg, border, 8, 2))
-	button.add_theme_stylebox_override("hover", _panel_style(bg.lightened(0.08), border.lightened(0.14), 8, 2))
-	button.add_theme_stylebox_override("pressed", _panel_style(bg.darkened(0.05), border.lightened(0.18), 8, 2))
-	button.add_theme_color_override("font_color", Color(0.94, 0.92, 0.86, 1.0))
+	UIStyleFactoryScript.apply_button_style(button, bg, border, 8, 2, 2, 2, Vector4(18, 18, 16, 16), 0, 0.14, 0.05, 0.18)
 
 func _panel_style(bg: Color, border: Color, radius: int, border_width: int) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = bg
-	style.border_color = border
-	style.set_border_width_all(border_width)
-	style.corner_radius_top_left = radius
-	style.corner_radius_top_right = radius
-	style.corner_radius_bottom_left = radius
-	style.corner_radius_bottom_right = radius
-	style.content_margin_left = 18
-	style.content_margin_right = 18
-	style.content_margin_top = 16
-	style.content_margin_bottom = 16
-	return style
+	return UIStyleFactoryScript.panel_style(bg, border, radius, border_width, Vector4(18, 18, 16, 16))
 
 func _clear_children(node: Node) -> void:
 	for child in node.get_children():

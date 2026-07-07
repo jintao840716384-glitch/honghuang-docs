@@ -10,6 +10,12 @@ const ZoneSlotScene = preload("res://scenes/ZoneSlot.tscn")
 const CombatActorViewScene = preload("res://scenes/CombatActorView.tscn")
 const BattleDebugToolsScript = preload("res://scripts/ui/BattleDebugTools.gd")
 const AudioManagerScript = preload("res://scripts/audio/AudioManager.gd")
+const CardInteractionRulesScript = preload("res://scripts/ui/CardInteractionRules.gd")
+const BattleAudioRouterScript = preload("res://scripts/ui/BattleAudioRouter.gd")
+const CardDisplayRulesScript = preload("res://scripts/ui/CardDisplayRules.gd")
+const UIStyleFactoryScript = preload("res://scripts/ui/UIStyleFactory.gd")
+const BattleFloatingTextRulesScript = preload("res://scripts/ui/BattleFloatingTextRules.gd")
+const CharacterVisualDatabaseScript = preload("res://scripts/assets/CharacterVisualDatabase.gd")
 
 const ACTOR_BASE_SIZE := Vector2(238, 286)
 const ACTOR_SIDE_SCALE := 0.72
@@ -269,6 +275,7 @@ func _setup_unit_actor_view(actor: CombatActorView, unit, is_player_side: bool) 
 	actor.set_meta("unit_team", "player" if is_player_side else "enemy")
 	_connect_actor_input(actor)
 	actor.mouse_filter = Control.MOUSE_FILTER_STOP
+	actor.apply_visual_profile(CharacterVisualDatabaseScript.profile_for_unit_data(_unit_visual_data(unit)))
 	var extra := ""
 	if unit == manager.player and manager.player.job_id == "sword":
 		extra = "剑势：%d" % manager.player.sword_momentum
@@ -294,6 +301,14 @@ func _setup_unit_actor_view(actor: CombatActorView, unit, is_player_side: bool) 
 	var selected_for_unit_action := false
 	actor.set_selected(selected_for_enemy_target or selected_for_unit_action)
 	actor.set_combat_highlight(_combat_highlight_mode_for_key(_unit_combat_key(unit)))
+
+func _unit_visual_data(unit) -> Dictionary:
+	return {
+		"id": str(unit.unit_id),
+		"name": str(unit.name),
+		"visual_profile_id": str(unit.visual_profile_id),
+		"animation_profile": str(unit.battle_animation_profile_id)
+	}
 
 func _layout_unit_actor_view(actor: CombatActorView, unit, is_player_side: bool, compact: bool) -> void:
 	var viewport_size := get_viewport_rect().size
@@ -622,13 +637,7 @@ func _refresh_hand() -> void:
 	_clear_children(hand_container)
 	for card in manager.deck.hand:
 		var button: CardButton = CardButtonScene.instantiate()
-		var prefix := "使用"
-		if card.get("type", "") == CardDatabaseScript.TYPE_DEFENSE:
-			prefix = "盖伏"
-		elif str(card.get("after_use", "")) == "equipment":
-			prefix = "装备"
-		elif str(card.get("after_use", "")) == "spell_zone":
-			prefix = "放置"
+		var prefix := CardInteractionRulesScript.hand_button_prefix_for_card(card)
 		button.setup(card, prefix)
 		button.hover_details_enabled = false
 		button.disabled = manager.phase != "player" or not manager.pending_choice.is_empty() or not manager.pending_equipment_replace.is_empty() or _interaction_locked()
@@ -1360,31 +1369,13 @@ func _global_point_in_control(point: Vector2, control: Control) -> bool:
 	return rect.has_point(point)
 
 func _card_drag_rule(card: Dictionary) -> String:
-	if card.get("type", "") == CardDatabaseScript.TYPE_DEFENSE:
-		return "spell_zone"
-	var after_use := str(card.get("after_use", ""))
-	if after_use == "spell_zone":
-		return "spell_zone"
-	if after_use == "equipment":
-		return "unit_equipment"
-	if _card_needs_enemy_target(card):
-		return "enemy_unit"
-	return "direct"
+	return CardInteractionRulesScript.card_drag_rule(card)
 
 func _card_needs_enemy_target(card: Dictionary) -> bool:
-	var effect: Dictionary = card.get("effect", {})
-	return _effect_needs_enemy_target(effect)
+	return CardInteractionRulesScript.card_needs_enemy_target(card)
 
 func _effect_needs_enemy_target(effect: Dictionary) -> bool:
-	match str(effect.get("kind", "")):
-		"direct_damage", "reduce_enemy_defense":
-			return true
-		"multi":
-			for sub_effect in effect.get("effects", []):
-				var sub_effect_dict: Dictionary = sub_effect
-				if _effect_needs_enemy_target(sub_effect_dict):
-					return true
-	return false
+	return CardInteractionRulesScript.effect_needs_enemy_target(effect)
 
 func _on_hand_card_pressed(uid: String) -> void:
 	if _interaction_locked():
@@ -1550,13 +1541,15 @@ func _on_log_close() -> void:
 	_apply_log_state(false)
 
 func _on_combat_event(event: Dictionary) -> void:
+	for event_name in BattleAudioRouterScript.events_for_combat_event(event):
+		audio_manager.play_event(str(event_name))
+	_apply_combat_floating_text(event)
 	match event.get("type", ""):
 		"turn_started":
 			_show_turn_banner(str(event.get("label", "")))
 		"cards_drawn":
 			_queue_draw_fx(event.get("cards", []))
 		"attack_started":
-			audio_manager.play_event("attack")
 			var source_key: String = str(event.get("source", ""))
 			var target_key: String = str(event.get("target", ""))
 			var source_actor: CombatActorView = _actor_for_combat_key(source_key)
@@ -1569,61 +1562,51 @@ func _on_combat_event(event: Dictionary) -> void:
 		"attack_finished":
 			_clear_combat_focus()
 		"damage_applied":
-			audio_manager.play_event("hit")
-			var value := int(event.get("value", 0))
-			var target_actor := _actor_for_combat_key(str(event.get("target", "")))
-			if target_actor != null:
-				target_actor.play_hit()
-				target_actor.show_floating_text("-%d" % value, Color(1.0, 0.22, 0.18, 1.0))
+			pass
 		"heal_applied":
-			audio_manager.play_event("heal")
-			var heal_actor := _actor_for_combat_key(str(event.get("target", "player")))
-			if heal_actor != null:
-				heal_actor.show_floating_text("+%d" % int(event.get("value", 0)), Color(0.30, 1.0, 0.45, 1.0))
+			pass
 		"sword_power_changed":
-			player_actor.show_floating_text("剑势 +%d" % int(event.get("value", 0)), Color(0.55, 0.78, 1.0, 1.0))
+			pass
 		"damage_reduced":
-			var reduce_actor := _actor_for_combat_key(str(event.get("target", "player")))
-			if reduce_actor != null:
-				reduce_actor.show_floating_text("减伤 %d" % int(event.get("value", 0)), Color(0.65, 0.85, 1.0, 1.0))
+			pass
 		"unit_defended":
-			var defend_actor := _actor_for_combat_key(str(event.get("target", "player")))
-			if defend_actor != null:
-				defend_actor.show_floating_text("防御 +%d" % int(event.get("value", 0)), Color(0.58, 0.78, 1.0, 1.0))
+			pass
 		"event_interrupted":
-			var interrupted_actor := _actor_for_combat_key(str(event.get("target", "enemy")))
-			if interrupted_actor != null:
-				interrupted_actor.show_floating_text("打断", Color(1.0, 0.85, 0.25, 1.0))
+			pass
 		"card_played":
-			audio_manager.play_event("card_play")
+			pass
 		"defense_card_set":
-			audio_manager.play_event("card_set")
 			highlighted_slot_uid = str(event.get("card", {}).get("uid", ""))
 		"card_placed_in_spell_zone":
-			audio_manager.play_event("card_place")
 			var placed_card: Dictionary = event.get("card", {})
 			highlighted_slot_uid = str(placed_card.get("uid", ""))
 			_flash_spell_slot(highlighted_slot_uid)
 		"card_equipped":
-			audio_manager.play_event("card_equip")
 			var equipped_card: Dictionary = event.get("card", {})
 			highlighted_equipment_uid = str(equipped_card.get("uid", ""))
 			_flash_equipment_slot(highlighted_equipment_uid)
 		"card_destroyed":
-			audio_manager.play_event("card_break")
+			pass
 		"defense_card_activated":
-			audio_manager.play_event("defense_activate")
 			var card: Dictionary = event.get("card", {})
 			highlighted_slot_uid = str(card.get("uid", ""))
 			_flash_spell_slot(highlighted_slot_uid)
-			player_actor.show_floating_text("发动 %s" % card.get("name", ""), Color(0.62, 0.78, 1.0, 1.0))
 		"chain_started":
-			audio_manager.play_event("chain_start")
+			pass
 		"chain_card_resolved":
-			audio_manager.play_event("chain_resolve")
 			var chain_card: Dictionary = event.get("card", {})
 			_flash_spell_slot(str(chain_card.get("uid", "")))
-			player_actor.show_floating_text("结算 %s" % chain_card.get("name", ""), Color(0.85, 0.72, 1.0, 1.0))
+
+func _apply_combat_floating_text(event: Dictionary) -> void:
+	for entry in BattleFloatingTextRulesScript.entries_for_combat_event(event):
+		var feedback: Dictionary = entry
+		var actor := _actor_for_combat_key(str(feedback.get("target", "")))
+		if actor == null:
+			continue
+		if bool(feedback.get("hit", false)):
+			actor.play_hit()
+		var color: Color = feedback.get("color", Color.WHITE)
+		actor.show_floating_text(str(feedback.get("text", "")), color)
 
 func _flash_spell_slot(uid: String) -> void:
 	if uid == "":
@@ -2144,13 +2127,7 @@ func _card_from_hand_button_or_manager(button: CardButton, uid: String) -> Dicti
 	return card.duplicate(true) if not card.is_empty() else {}
 
 func _hand_prefix_for_card(card: Dictionary) -> String:
-	if card.is_empty():
-		return ""
-	if card.get("type", "") == CardDatabaseScript.TYPE_DEFENSE:
-		return "盖伏"
-	if str(card.get("after_use", "")) == "equipment":
-		return "装备"
-	return "使用"
+	return CardInteractionRulesScript.played_card_fx_prefix_for_card(card)
 
 func _play_hand_card_release_fx(card: Dictionary, prefix: String, start_global_position: Vector2, start_size: Vector2, start_scale: Vector2) -> void:
 	if fx_layer == null or card.is_empty():
@@ -2246,13 +2223,7 @@ func _create_card_outline(card: Dictionary, outline_size: Vector2) -> Panel:
 	return outline
 
 func _card_outline_style(card: Dictionary) -> StyleBoxFlat:
-	var card_type := str(card.get("type", ""))
-	var after_use := str(card.get("after_use", ""))
-	var border := Color(0.96, 0.68, 0.34, 1.0)
-	if card_type == CardDatabaseScript.TYPE_DEFENSE:
-		border = Color(0.58, 0.75, 1.0, 1.0)
-	elif after_use == "equipment":
-		border = Color(0.50, 0.92, 0.62, 1.0)
+	var border := CardDisplayRulesScript.card_outline_border_color(card)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(border.r, border.g, border.b, 0.04)
 	style.border_color = border
@@ -2341,35 +2312,13 @@ func _style_end_turn_button(glowing: bool) -> void:
 		_style_button(end_turn_button, Color(0.12, 0.18, 0.22, 1.0), Color(0.44, 0.70, 0.90, 1.0))
 
 func _style_button(button: Button, bg: Color, border: Color, shadow_size := 0) -> void:
-	var hover_shadow := 0
-	if shadow_size > 0:
-		hover_shadow = shadow_size + 3
-	button.add_theme_stylebox_override("normal", _button_style(bg, border, 6, 1, shadow_size))
-	button.add_theme_stylebox_override("hover", _button_style(bg.lightened(0.08), border.lightened(0.12), 6, 2, hover_shadow))
-	button.add_theme_stylebox_override("pressed", _button_style(bg.darkened(0.06), border.lightened(0.18), 6, 2, shadow_size))
-	button.add_theme_color_override("font_color", Color(0.94, 0.92, 0.86, 1.0))
+	UIStyleFactoryScript.apply_button_style(button, bg, border, 6, 1, 2, 2, Vector4(10, 10, 8, 8), shadow_size, 0.12, 0.06, 0.18)
 
 func _button_style(bg: Color, border: Color, radius: int, border_width: int, shadow_size := 0) -> StyleBoxFlat:
-	var style := _panel_style(bg, border, radius, border_width)
-	if shadow_size > 0:
-		style.shadow_color = Color(border.r, border.g, border.b, 0.44)
-		style.shadow_size = shadow_size
-	return style
+	return UIStyleFactoryScript.button_style(bg, border, radius, border_width, Vector4(10, 10, 8, 8), shadow_size)
 
 func _panel_style(bg: Color, border: Color, radius: int, border_width: int) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = bg
-	style.border_color = border
-	style.set_border_width_all(border_width)
-	style.corner_radius_top_left = radius
-	style.corner_radius_top_right = radius
-	style.corner_radius_bottom_left = radius
-	style.corner_radius_bottom_right = radius
-	style.content_margin_left = 10
-	style.content_margin_right = 10
-	style.content_margin_top = 8
-	style.content_margin_bottom = 8
-	return style
+	return UIStyleFactoryScript.panel_style(bg, border, radius, border_width, Vector4(10, 10, 8, 8))
 
 func _clear_children(node: Node) -> void:
 	for child in node.get_children():

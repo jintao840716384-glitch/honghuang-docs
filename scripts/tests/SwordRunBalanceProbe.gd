@@ -2,6 +2,7 @@ extends SceneTree
 
 const BattleManagerScript = preload("res://scripts/battle/BattleManager.gd")
 const CardDatabaseScript = preload("res://scripts/data/CardDatabase.gd")
+const DeckBuildRulesScript = preload("res://scripts/run/DeckBuildRules.gd")
 
 const PLAYER_BASE_HP := 35
 const SCORE_LIMIT := 20
@@ -120,7 +121,7 @@ func _run_case(deck_name: String, base_deck: Array, route_name: String, route: A
 	var losses := runs - wins
 	var avg_hp := 0.0 if wins <= 0 else float(hp_total) / float(wins)
 	var avg_fail_stage := 0.0 if losses <= 0 else float(fail_stage_total) / float(losses)
-	var deck_score: int = CardDatabaseScript.deck_score(base_deck)
+	var deck_score: int = DeckBuildRulesScript.deck_score(base_deck)
 	return "%s | %s | score %d | win %d/%d (%.1f%%) | avg_win_hp %.1f | avg_fail_stage %.1f | earliest_fail %s" % [
 		deck_name,
 		route_name,
@@ -285,9 +286,9 @@ func _pick_reward(options: Array, deck: Array) -> String:
 	}
 	for id_variant in options:
 		var id := str(id_variant)
-		if not CardDatabaseScript.can_add_card_to_deck(id, deck, SCORE_LIMIT):
+		if not DeckBuildRulesScript.can_add_card_to_deck(id, deck, SCORE_LIMIT):
 			continue
-		var score: int = int(weights.get(id, 0)) - CardDatabaseScript.card_score(id)
+		var score: int = int(weights.get(id, 0)) - DeckBuildRulesScript.card_score(id)
 		if score > best_score:
 			best_score = score
 			best_id = id
@@ -300,7 +301,7 @@ func _apply_after_node_reward(state: Dictionary, reward_type: String) -> void:
 		"treasure":
 			var deck: Array = state.get("deck", [])
 			for id in ["回春符", "火球符", "护身符", "起剑诀"]:
-				if CardDatabaseScript.can_add_card_to_deck(id, deck, SCORE_LIMIT):
+				if DeckBuildRulesScript.can_add_card_to_deck(id, deck, SCORE_LIMIT):
 					deck.append(id)
 					state["deck"] = deck
 					return

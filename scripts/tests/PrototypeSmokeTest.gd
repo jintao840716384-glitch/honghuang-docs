@@ -1,10 +1,41 @@
 extends SceneTree
 
 const BattleManagerScript = preload("res://scripts/battle/BattleManager.gd")
+const EnemyAIControllerScript = preload("res://scripts/battle/EnemyAIController.gd")
+const BattleEncounterRuntimeScript = preload("res://scripts/battle/BattleEncounterRuntime.gd")
+const BattleUnitScript = preload("res://scripts/battle/BattleUnit.gd")
+const CardDefinitionDatabaseScript = preload("res://scripts/data/CardDefinitionDatabase.gd")
 const CardDatabaseScript = preload("res://scripts/data/CardDatabase.gd")
+const CardPoolDatabaseScript = preload("res://scripts/data/CardPoolDatabase.gd")
+const DeckBuildRulesScript = preload("res://scripts/run/DeckBuildRules.gd")
+const CardAcquisitionRulesScript = preload("res://scripts/run/CardAcquisitionRules.gd")
+const RewardServiceScript = preload("res://scripts/run/RewardService.gd")
+const ExplorationRulesScript = preload("res://scripts/run/ExplorationRules.gd")
+const CardInteractionRulesScript = preload("res://scripts/ui/CardInteractionRules.gd")
+const BattleAudioRouterScript = preload("res://scripts/ui/BattleAudioRouter.gd")
+const CardDisplayRulesScript = preload("res://scripts/ui/CardDisplayRules.gd")
+const BattleFloatingTextRulesScript = preload("res://scripts/ui/BattleFloatingTextRules.gd")
+const MapModalChoiceFactoryScript = preload("res://scripts/ui/MapModalChoiceFactory.gd")
+const VisualAssetDatabaseScript = preload("res://scripts/assets/VisualAssetDatabase.gd")
+const CharacterVisualDatabaseScript = preload("res://scripts/assets/CharacterVisualDatabase.gd")
+const BattlePresentationRouterScript = preload("res://scripts/assets/BattlePresentationRouter.gd")
+const AudioEventDatabaseScript = preload("res://scripts/audio/AudioEventDatabase.gd")
+const AudioManagerScript = preload("res://scripts/audio/AudioManager.gd")
+const AssetAttributionDatabaseScript = preload("res://scripts/assets/AssetAttributionDatabase.gd")
+const GameSettingsScript = preload("res://scripts/settings/GameSettings.gd")
+const SettingsStoreScript = preload("res://scripts/settings/SettingsStore.gd")
+const DisplayModeManagerScript = preload("res://scripts/settings/DisplayModeManager.gd")
+const InputActionDatabaseScript = preload("res://scripts/settings/InputActionDatabase.gd")
+const InputSettingsScript = preload("res://scripts/settings/InputSettings.gd")
+const LocalizationDatabaseScript = preload("res://scripts/localization/LocalizationDatabase.gd")
+const LocalizationServiceScript = preload("res://scripts/localization/LocalizationService.gd")
+const SaveMigrationServiceScript = preload("res://scripts/save/SaveMigrationService.gd")
 const EnemyDatabaseScript = preload("res://scripts/data/EnemyDatabase.gd")
+const CharacterDatabaseScript = preload("res://scripts/data/CharacterDatabase.gd")
+const JobDatabaseScript = preload("res://scripts/data/JobDatabase.gd")
 const RunStateScript = preload("res://scripts/run/RunState.gd")
 const MetaProgressionScript = preload("res://scripts/data/MetaProgression.gd")
+const ProgressionDatabaseScript = preload("res://scripts/data/ProgressionDatabase.gd")
 
 func _init() -> void:
 	var ok := true
@@ -26,20 +57,30 @@ func _init() -> void:
 	ok = _report_test("_test_defeated_units_leave_formation", _test_defeated_units_leave_formation()) and ok
 	ok = _report_test("_test_deck_build_limits", _test_deck_build_limits()) and ok
 	ok = _report_test("_test_sideboard_moves", _test_sideboard_moves()) and ok
+	ok = _report_test("_test_card_definition_database_boundary", _test_card_definition_database_boundary()) and ok
+	ok = _report_test("_test_ui_interaction_and_audio_boundaries", _test_ui_interaction_and_audio_boundaries()) and ok
+	ok = _report_test("_test_visual_and_audio_asset_boundaries", _test_visual_and_audio_asset_boundaries()) and ok
+	ok = _report_test("_test_commercial_foundation_boundaries", _test_commercial_foundation_boundaries()) and ok
+	ok = _report_test("_test_map_modal_choice_factory_boundary", _test_map_modal_choice_factory_boundary()) and ok
 	ok = _report_test("_test_reward_pool_tiers", _test_reward_pool_tiers()) and ok
 	ok = _report_test("_test_reward_pool_scopes", _test_reward_pool_scopes()) and ok
+	ok = _report_test("_test_card_acquisition_rules_boundary", _test_card_acquisition_rules_boundary()) and ok
 	ok = _report_test("_test_exploration_node_types_and_economy", _test_exploration_node_types_and_economy()) and ok
 	ok = _report_test("_test_boss_settlement_and_meta_progression", _test_boss_settlement_and_meta_progression()) and ok
+	ok = _report_test("_test_progression_database_boundary", _test_progression_database_boundary()) and ok
 	ok = _report_test("_test_failed_run_settlement", _test_failed_run_settlement()) and ok
 	ok = _report_test("_test_exploration_battle_completion", _test_exploration_battle_completion()) and ok
 	ok = _report_test("_test_battle_unit_framework", _test_battle_unit_framework()) and ok
 	ok = _report_test("_test_battle_side_framework", _test_battle_side_framework()) and ok
 	ok = _report_test("_test_enemy_card_packages", _test_enemy_card_packages()) and ok
 	ok = _report_test("_test_enemy_encounter_architecture", _test_enemy_encounter_architecture()) and ok
+	ok = _report_test("_test_battle_encounter_runtime_boundary", _test_battle_encounter_runtime_boundary()) and ok
+	ok = _report_test("_test_job_database_uses_character_pool", _test_job_database_uses_character_pool()) and ok
 	ok = _report_test("_test_effect_steps_and_enemy_skill", _test_effect_steps_and_enemy_skill()) and ok
 	ok = _report_test("_test_target_selection_for_multi_enemy", _test_target_selection_for_multi_enemy()) and ok
 	ok = _report_test("_test_summon_and_enemy_target_pool", _test_summon_and_enemy_target_pool()) and ok
 	ok = _report_test("_test_player_unit_actions", _test_player_unit_actions()) and ok
+	ok = _report_test("_test_enemy_ai_controller_boundary", _test_enemy_ai_controller_boundary()) and ok
 	ok = _report_test("_test_enemy_side_action_sequence", _test_enemy_side_action_sequence()) and ok
 	ok = _report_test("_test_ally_damage_response_scope", _test_ally_damage_response_scope()) and ok
 	ok = _report_test("_test_common_status_and_zone_cards", _test_common_status_and_zone_cards()) and ok
@@ -381,23 +422,24 @@ func _test_defeated_units_leave_formation() -> bool:
 
 func _test_deck_build_limits() -> bool:
 	var deck_ids := ["火球符", "火球符", "火球符"]
-	if not CardDatabaseScript.can_add_card_to_deck("火球符", deck_ids, 0):
+	if not DeckBuildRulesScript.can_add_card_to_deck("火球符", deck_ids, 0):
 		return false
-	if not CardDatabaseScript.can_add_card_to_deck("雷击符", deck_ids, 20):
+	if not DeckBuildRulesScript.can_add_card_to_deck("雷击符", deck_ids, 20):
 		return false
-	if CardDatabaseScript.can_add_card_to_deck("一剑开天", deck_ids, CardDatabaseScript.deck_score(deck_ids) + CardDatabaseScript.card_score("一剑开天") - 1):
+	if DeckBuildRulesScript.can_add_card_to_deck("一剑开天", deck_ids, DeckBuildRulesScript.deck_score(deck_ids) + DeckBuildRulesScript.card_score("一剑开天") - 1):
 		return false
 	var full_deck: Array = []
-	for i in range(CardDatabaseScript.MAX_DECK_SIZE):
+	for i in range(DeckBuildRulesScript.max_deck_size()):
 		full_deck.append("火球符")
-	if CardDatabaseScript.can_add_card_to_deck("雷击符", full_deck, 0):
+	if DeckBuildRulesScript.can_add_card_to_deck("雷击符", full_deck, 0):
 		return false
 	var run_state = RunStateScript.new()
 	run_state.start("sword")
-	var ok: bool = CardDatabaseScript.deck_score(run_state.deck_ids) <= run_state.deck_score_limit
-	ok = ok and run_state.deck_ids.size() >= CardDatabaseScript.MIN_DECK_SIZE
-	ok = ok and run_state.deck_ids.size() <= CardDatabaseScript.MAX_DECK_SIZE
+	var ok: bool = DeckBuildRulesScript.deck_score(run_state.deck_ids) <= run_state.deck_score_limit
+	ok = ok and run_state.deck_ids.size() >= DeckBuildRulesScript.min_deck_size()
+	ok = ok and run_state.deck_ids.size() <= DeckBuildRulesScript.max_deck_size()
 	ok = ok and run_state.deck_build_block_reason([]) != ""
+	ok = ok and run_state.deck_build_block_reason([]) == DeckBuildRulesScript.deck_build_block_reason([], run_state.deck_score_limit)
 	ok = ok and run_state.deck_build_block_reason(run_state.deck_ids) == ""
 	return ok
 
@@ -415,12 +457,12 @@ func _test_sideboard_moves() -> bool:
 	if reason != "" or run_state.deck_ids.size() != deck_size_before or not run_state.reserve_ids.is_empty():
 		return false
 	var over_deck: Array = run_state.deck_ids.duplicate()
-	for i in range(CardDatabaseScript.MAX_DECK_SIZE - over_deck.size() + 1):
+	for i in range(DeckBuildRulesScript.max_deck_size() - over_deck.size() + 1):
 		over_deck.append("火球符")
 	if run_state.apply_deck_build(over_deck, []) == "":
 		return false
 	var full_deck: Array = []
-	for i in range(CardDatabaseScript.MAX_DECK_SIZE):
+	for i in range(DeckBuildRulesScript.max_deck_size()):
 		full_deck.append("火球符")
 	var battle = BattleManagerScript.new()
 	battle.start_run_with_deck("sword", full_deck, 1, "normal", false, {"deck_score_limit": 999})
@@ -429,13 +471,251 @@ func _test_sideboard_moves() -> bool:
 	battle.choose_reward("雷击符")
 	return battle.phase == "map_complete" and battle.master_reserve_ids.has("雷击符")
 
+func _test_card_definition_database_boundary() -> bool:
+	var common_pool: Array = CardPoolDatabaseScript.common_pool()
+	if common_pool.is_empty():
+		return false
+	var card_id := str(common_pool[0])
+	var raw_card: Dictionary = CardDefinitionDatabaseScript.get_card(card_id)
+	if raw_card.is_empty():
+		return false
+	if raw_card.has("unlock_pack") or raw_card.has("default_unlocked"):
+		return false
+	var compatible_card: Dictionary = CardDatabaseScript.get_card(card_id)
+	if compatible_card.is_empty():
+		return false
+	if not compatible_card.has("unlock_pack") or not compatible_card.has("default_unlocked"):
+		return false
+	if CardDatabaseScript.card_score(card_id) != CardDefinitionDatabaseScript.card_score(card_id):
+		return false
+	return CardPoolDatabaseScript.reward_pool_for_job("sword", "normal", 0).has(card_id)
+
+func _test_ui_interaction_and_audio_boundaries() -> bool:
+	var defense_card := {
+		"type": CardDefinitionDatabaseScript.TYPE_DEFENSE,
+		"after_use": "graveyard",
+		"effect": {}
+	}
+	var equipment_card := {
+		"type": CardDefinitionDatabaseScript.TYPE_SPELL,
+		"after_use": "equipment",
+		"effect": {}
+	}
+	var targeted_card := {
+		"type": CardDefinitionDatabaseScript.TYPE_SPELL,
+		"after_use": "graveyard",
+		"effect": {
+			"kind": "multi",
+			"effects": [
+				{"kind": "draw", "value": 1},
+				{"kind": "direct_damage", "value": 2}
+			]
+		}
+	}
+	var direct_card := {
+		"type": CardDefinitionDatabaseScript.TYPE_SPELL,
+		"after_use": "graveyard",
+		"effect": {"kind": "draw", "value": 1}
+	}
+	if CardInteractionRulesScript.card_drag_rule(defense_card) != "spell_zone":
+		return false
+	if CardInteractionRulesScript.card_drag_rule(equipment_card) != "unit_equipment":
+		return false
+	if CardInteractionRulesScript.card_drag_rule(targeted_card) != "enemy_unit":
+		return false
+	if CardInteractionRulesScript.card_drag_rule(direct_card) != "direct":
+		return false
+	if CardInteractionRulesScript.hand_button_prefix_for_card(defense_card) == "":
+		return false
+	if CardDisplayRulesScript.card_type_label(equipment_card) == "":
+		return false
+	if CardDisplayRulesScript.card_type_text(targeted_card, 2) == "":
+		return false
+	if CardDisplayRulesScript.tags_text(direct_card) == "":
+		return false
+	var defense_palette: Dictionary = CardDisplayRulesScript.card_palette(defense_card)
+	if not defense_palette.has("bg") or not defense_palette.has("border") or not defense_palette.has("name_color"):
+		return false
+	var slot_palette: Dictionary = CardDisplayRulesScript.zone_slot_palette(equipment_card, true, false)
+	if not slot_palette.has("bg") or not slot_palette.has("border"):
+		return false
+	var audio_events: Array = BattleAudioRouterScript.events_for_combat_event({"type": "damage_applied"})
+	if audio_events.size() != 1 or str(audio_events[0]) != "hit":
+		return false
+	if not BattleAudioRouterScript.events_for_combat_event({"type": "turn_started"}).is_empty():
+		return false
+	var floating_entries: Array = BattleFloatingTextRulesScript.entries_for_combat_event({
+		"type": "damage_applied",
+		"target": "enemy",
+		"value": 3
+	})
+	if floating_entries.size() != 1:
+		return false
+	var floating_entry: Dictionary = floating_entries[0]
+	if str(floating_entry.get("target", "")) != "enemy" or str(floating_entry.get("text", "")) != "-3":
+		return false
+	return BattleFloatingTextRulesScript.entries_for_combat_event({"type": "turn_started"}).is_empty()
+
+func _test_visual_and_audio_asset_boundaries() -> bool:
+	if not VisualAssetDatabaseScript.category_ids().has(VisualAssetDatabaseScript.CATEGORY_UI_TEXTURE):
+		return false
+	if not VisualAssetDatabaseScript.category_ids().has(VisualAssetDatabaseScript.CATEGORY_CHARACTER_SPRITE):
+		return false
+	if not VisualAssetDatabaseScript.category_ids().has(VisualAssetDatabaseScript.CATEGORY_BATTLE_ANIMATION):
+		return false
+	if not VisualAssetDatabaseScript.category_ids().has(VisualAssetDatabaseScript.CATEGORY_ICON):
+		return false
+	if not VisualAssetDatabaseScript.has_asset("character.sword.portrait"):
+		return false
+	var sword_profile: Dictionary = CharacterVisualDatabaseScript.profile("sword")
+	if str(sword_profile.get("portrait_asset_id", "")) != "character.sword.portrait":
+		return false
+	var sword_character: Dictionary = CharacterDatabaseScript.character_template("sword")
+	var sword_unit = BattleUnitScript.new()
+	sword_unit.setup_unit(sword_character)
+	if str(sword_unit.visual_profile_id) != "sword":
+		return false
+	var unit_profile: Dictionary = CharacterVisualDatabaseScript.profile_for_unit_data(sword_character)
+	if str(unit_profile.get("battle_animation_asset_id", "")) == "":
+		return false
+	var presentation_actions: Array = BattlePresentationRouterScript.actions_for_combat_event({
+		"type": "attack_started",
+		"source": "player",
+		"target": "enemy"
+	})
+	if presentation_actions.size() < 2:
+		return false
+	if str((presentation_actions[0] as Dictionary).get("kind", "")) != BattlePresentationRouterScript.ACTION_ACTOR_ANIMATION:
+		return false
+	if not AudioEventDatabaseScript.has_event("attack") or not AudioEventDatabaseScript.has_event("ui_click"):
+		return false
+	if not AudioEventDatabaseScript.event_ids_for_category(AudioEventDatabaseScript.CATEGORY_MUSIC).has("music.battle"):
+		return false
+	if AudioEventDatabaseScript.cooldown_ms("hit") <= 0:
+		return false
+	return true
+
+func _test_commercial_foundation_boundaries() -> bool:
+	var settings: Dictionary = GameSettingsScript.default_data()
+	var sanitized: Dictionary = GameSettingsScript.sanitize({
+		"display": {"resolution_id": "bad", "window_mode": "invalid", "vsync_enabled": true},
+		"audio": {"master_volume": 2.0, "music_volume": -1.0, "sfx_volume": 0.5},
+		"gameplay": {"animation_speed": 9.0},
+		"accessibility": {"reduce_motion": true, "text_scale": 3.0}
+	})
+	var audio: Dictionary = GameSettingsScript.audio_settings(sanitized)
+	if float(audio.get("master_volume", 0.0)) != 1.0 or float(audio.get("music_volume", 1.0)) != 0.0:
+		return false
+	var localization: Dictionary = GameSettingsScript.localization_settings(sanitized)
+	if str(localization.get("language_id", "")) != LocalizationDatabaseScript.DEFAULT_LANGUAGE_ID:
+		return false
+	var english_settings: Dictionary = SettingsStoreScript.set_language_id(settings, "en_us")
+	if LocalizationServiceScript.text_for_settings("menu.start_game", english_settings) != "Start Game":
+		return false
+	if LocalizationServiceScript.text_for_settings("settings.master_volume", english_settings, {"percent": 50}) != "Master Volume  50%":
+		return false
+	if LocalizationServiceScript.text("missing.text.id", "en_us") != "missing.text.id":
+		return false
+	var config := ConfigFile.new()
+	SaveMigrationServiceScript.apply_config_metadata(config, SaveMigrationServiceScript.SAVE_KIND_SETTINGS)
+	if SaveMigrationServiceScript.config_schema_version(config, SaveMigrationServiceScript.SAVE_KIND_SETTINGS) != SaveMigrationServiceScript.CURRENT_SETTINGS_VERSION:
+		return false
+	var migrated_settings: Dictionary = SaveMigrationServiceScript.migrate_settings({"audio": {"master_volume": 9.0}, "localization": {"language_id": "bad"}}, 0)
+	var migrated_audio: Dictionary = GameSettingsScript.audio_settings(migrated_settings)
+	if float(migrated_audio.get("master_volume", 0.0)) != 1.0:
+		return false
+	var migrated_progression: Dictionary = SaveMigrationServiceScript.migrate_meta_progression({
+		"version": 1,
+		"jobs": {
+			"sword": {
+				"points_total": -5,
+				"points_spent": 3,
+				"upgrades": {"attack": -2, "max_hp": 1}
+			}
+		}
+	})
+	if int(migrated_progression.get("version", 0)) != SaveMigrationServiceScript.CURRENT_META_PROGRESSION_VERSION:
+		return false
+	var migrated_sword: Dictionary = ((migrated_progression.get("jobs", {}) as Dictionary).get("sword", {}) as Dictionary)
+	var migrated_upgrades: Dictionary = (migrated_sword.get("upgrades", {}) as Dictionary)
+	if int(migrated_sword.get("points_total", -1)) != 0 or int(migrated_upgrades.get("attack", -1)) != 0:
+		return false
+	var display: Dictionary = DisplayModeManagerScript.normalized_display_settings(settings)
+	if str(display.get("aspect_policy", "")) != DisplayModeManagerScript.ASPECT_POLICY:
+		return false
+	if DisplayModeManagerScript.resolution_size("1920x1080") != Vector2i(1920, 1080):
+		return false
+	if not DisplayModeManagerScript.resolution_ids().has("2560x1440"):
+		return false
+	if InputActionDatabaseScript.action_definition("end_turn").is_empty():
+		return false
+	if InputActionDatabaseScript.actions_for_category(InputActionDatabaseScript.CATEGORY_CARD_SHORTCUT).size() != 10:
+		return false
+	InputSettingsScript.apply_default_bindings()
+	if InputSettingsScript.binding_count("end_turn") <= 0:
+		return false
+	var custom_event := InputEventKey.new()
+	custom_event.keycode = KEY_Q
+	var custom_spec: Dictionary = InputActionDatabaseScript.spec_from_event(custom_event)
+	if str(InputActionDatabaseScript.binding_label(custom_spec)) != "Q":
+		return false
+	var custom_input_settings: Dictionary = SettingsStoreScript.set_action_binding(settings, "end_turn", custom_spec)
+	if InputSettingsScript.binding_label_for_action(custom_input_settings, "end_turn") != "Q":
+		return false
+	InputSettingsScript.apply_bindings(InputSettingsScript.settings_bindings(custom_input_settings))
+	if InputSettingsScript.binding_count("end_turn") != 1:
+		return false
+	var default_input_settings: Dictionary = SettingsStoreScript.reset_action_binding(custom_input_settings, "end_turn")
+	if InputSettingsScript.binding_label_for_action(default_input_settings, "end_turn") == "Q":
+		return false
+	var updated_settings: Dictionary = SettingsStoreScript.set_audio_volume(settings, "master_volume", 0.25)
+	var updated_audio: Dictionary = GameSettingsScript.audio_settings(updated_settings)
+	if abs(float(updated_audio.get("master_volume", 0.0)) - 0.25) > 0.001:
+		return false
+	if not AudioEventDatabaseScript.event_ids_for_category(AudioEventDatabaseScript.CATEGORY_MUSIC).has("music.main_menu"):
+		return false
+	var audio_manager = AudioManagerScript.new()
+	audio_manager.set_sfx_volume(0.35)
+	if abs(float(audio_manager.sfx_volume) - 0.35) > 0.001:
+		audio_manager.free()
+		return false
+	audio_manager.free()
+	if not AssetAttributionDatabaseScript.has_commercial_clearance("ui.default_background"):
+		return false
+	return AssetAttributionDatabaseScript.unknown_assets(["unknown.asset"]).size() == 1
+
+func _test_map_modal_choice_factory_boundary() -> bool:
+	var parent := VBoxContainer.new()
+	var grid: GridContainer = MapModalChoiceFactoryScript.create_card_grid(parent, 2)
+	if grid == null or grid.columns != 2 or parent.get_child_count() != 1:
+		parent.free()
+		return false
+	if not MapModalChoiceFactoryScript.add_reward_choice(grid, "test_reward", "test", "test", "test", func() -> void:
+		pass
+	):
+		parent.free()
+		return false
+	var card_ids: Array = CardDatabaseScript.get_cards().keys()
+	if card_ids.is_empty():
+		parent.free()
+		return false
+	var first_card_id := str(card_ids[0])
+	if not MapModalChoiceFactoryScript.add_card_choice(grid, first_card_id, "test", func(_card_id: String) -> void:
+		pass
+	):
+		parent.free()
+		return false
+	var ok := grid.get_child_count() == 2
+	parent.free()
+	return ok
+
 func _test_reward_pool_tiers() -> bool:
-	var default_sword_packs := CardDatabaseScript.unlocked_packs_for_job("sword", 0)
-	var full_sword_packs := CardDatabaseScript.unlocked_packs_for_job("sword", 2)
-	var normal_pool := CardDatabaseScript.reward_pool_for_job("sword", "normal", 0)
-	var elite_pool := CardDatabaseScript.reward_pool_for_job("sword", "elite", 0)
-	var locked_boss_pool := CardDatabaseScript.reward_pool_for_job("sword", "boss", 0)
-	var unlocked_boss_pool := CardDatabaseScript.reward_pool_for_job("sword", "boss", 2)
+	var default_sword_packs := CardPoolDatabaseScript.unlocked_packs_for_job("sword", 0)
+	var full_sword_packs := CardPoolDatabaseScript.unlocked_packs_for_job("sword", 2)
+	var normal_pool := CardPoolDatabaseScript.reward_pool_for_job("sword", "normal", 0)
+	var elite_pool := CardPoolDatabaseScript.reward_pool_for_job("sword", "elite", 0)
+	var locked_boss_pool := CardPoolDatabaseScript.reward_pool_for_job("sword", "boss", 0)
+	var unlocked_boss_pool := CardPoolDatabaseScript.reward_pool_for_job("sword", "boss", 2)
 	if normal_pool.is_empty() or elite_pool.is_empty() or locked_boss_pool.is_empty() or unlocked_boss_pool.is_empty():
 		return false
 	if not default_sword_packs.has("common_1") or not default_sword_packs.has("sword_1") or default_sword_packs.has("common_2"):
@@ -448,21 +728,33 @@ func _test_reward_pool_tiers() -> bool:
 		return false
 	if not unlocked_boss_pool.has("一剑开天"):
 		return false
-	var pack_slots: Array = CardDatabaseScript.pack_ids_for_job("sword")
-	var pack_counts: Dictionary = CardDatabaseScript.pack_card_counts_for_job("sword")
+	var pack_slots: Array = CardPoolDatabaseScript.pack_ids_for_job("sword")
+	var pack_counts: Dictionary = CardPoolDatabaseScript.pack_card_counts_for_job("sword")
 	if not pack_slots.has("common_5") or not pack_slots.has("sword_5"):
 		return false
 	if int(pack_counts.get("common_4", -1)) != 0 or int(pack_counts.get("sword_4", -1)) != 0:
 		return false
-	return CardDatabaseScript.card_unlock_tier("一剑开天") == 2 and CardDatabaseScript.card_unlock_pack("一剑开天") == "sword_3" and CardDatabaseScript.card_unlock_pack("火球符") == "common_1" and CardDatabaseScript.card_unlock_pack("雷击符") == "common_2" and CardDatabaseScript.card_unlock_pack("护心镜") == "common_3" and CardDatabaseScript.get_card("火球符").get("default_unlocked", false)
+	return CardPoolDatabaseScript.card_unlock_tier("一剑开天") == 2 and CardPoolDatabaseScript.card_unlock_pack("一剑开天") == "sword_3" and CardPoolDatabaseScript.card_unlock_pack("火球符") == "common_1" and CardPoolDatabaseScript.card_unlock_pack("雷击符") == "common_2" and CardPoolDatabaseScript.card_unlock_pack("护心镜") == "common_3" and CardDatabaseScript.get_card("火球符").get("default_unlocked", false)
 
 func _test_reward_pool_scopes() -> bool:
-	var talisman_pool := CardDatabaseScript.reward_pool_for_job("talisman", "boss", 2)
+	var talisman_pool := CardPoolDatabaseScript.reward_pool_for_job("talisman", "boss", 2)
 	if talisman_pool.has("养剑匣"):
 		return false
-	var sword_job_pool := CardDatabaseScript.job_pool("sword")
-	var talisman_job_pool := CardDatabaseScript.job_pool("talisman")
+	var sword_job_pool := CardPoolDatabaseScript.job_pool("sword")
+	var talisman_job_pool := CardPoolDatabaseScript.job_pool("talisman")
 	return sword_job_pool.has("养剑匣") and not talisman_job_pool.has("养剑匣")
+
+func _test_card_acquisition_rules_boundary() -> bool:
+	var deck_ids := ["青锋剑", "起剑诀", "藏锋", "疾剑诀", "铁木甲", "护身符", "雷击符", "破法符", "养剑匣"]
+	var deck_result: Dictionary = CardAcquisitionRulesScript.card_gain_result("火球符", deck_ids, 20)
+	if str(deck_result.get("destination", "")) != "deck":
+		return false
+	var full_deck := ["青锋剑", "起剑诀", "藏锋", "疾剑诀", "铁木甲", "护身符", "雷击符", "破法符", "养剑匣", "火球符", "回春符", "金刃符", "小还丹", "固元符", "换气符", "破甲符", "缚身符", "护阵符", "反震符", "封藏符"]
+	var reserve_result: Dictionary = CardAcquisitionRulesScript.card_gain_result("护心镜", full_deck, 20)
+	if str(reserve_result.get("destination", "")) != "reserve":
+		return false
+	var compatibility_result: Dictionary = RewardServiceScript.card_gain_result("护心镜", full_deck, 20)
+	return str(compatibility_result.get("destination", "")) == str(reserve_result.get("destination", ""))
 
 func _test_exploration_node_types_and_economy() -> bool:
 	var run_state = RunStateScript.new()
@@ -487,19 +779,97 @@ func _test_exploration_node_types_and_economy() -> bool:
 	var elite_node := {"type": "elite"}
 	if run_state.battle_spirit_reward(elite_node) <= run_state.battle_spirit_reward(normal_node):
 		return false
+	if run_state.battle_spirit_reward(elite_node) != RewardServiceScript.battle_spirit_reward(run_state.realm_index, elite_node):
+		return false
+	if run_state.cultivation_reward_for_node({"type": "treasure"}) != RewardServiceScript.cultivation_reward_for_node({"type": "treasure"}):
+		return false
+	if run_state.cultivation_reward_for_node({"type": "treasure"}) != ExplorationRulesScript.cultivation_reward_for_node({"type": "treasure"}):
+		return false
+	var gain_result: Dictionary = RewardServiceScript.card_gain_result("雷击符", run_state.deck_ids, run_state.deck_score_limit)
+	if not ["deck", "reserve"].has(str(gain_result.get("destination", ""))):
+		return false
+	var minor_offer: Dictionary = run_state.minor_event_offer()
+	if not ["stone", "card"].has(str(minor_offer.get("kind", ""))):
+		return false
+	run_state.reserve_ids.append("雷击符")
+	var trade_offer: Dictionary = run_state.trade_event_offer()
+	if (trade_offer.get("stone_option", {}) as Dictionary).is_empty():
+		return false
+	if (trade_offer.get("hp_option", {}) as Dictionary).is_empty():
+		return false
+	if (trade_offer.get("fallback_option", {}) as Dictionary).is_empty():
+		return false
+	if int((trade_offer.get("exchange_option", {}) as Dictionary).get("reserve_index", -1)) < 0:
+		return false
+	var stones_before_event: int = run_state.spirit_stones
+	var event_stone_result: Dictionary = run_state.apply_event_stone_reward(5, "事件：获得 %d 灵石。")
+	if not bool(event_stone_result.get("success", false)) or run_state.spirit_stones != stones_before_event + 5:
+		return false
+	var total_cards_before_event: int = run_state.deck_ids.size() + run_state.reserve_ids.size()
+	var event_card_result: Dictionary = run_state.apply_event_card_reward("火球符", "事件")
+	if not bool(event_card_result.get("success", false)) or run_state.deck_ids.size() + run_state.reserve_ids.size() != total_cards_before_event + 1:
+		return false
+	var hp_before_trade: int = run_state.current_hp
+	var hp_trade_result: Dictionary = run_state.apply_trade_hp_reward(1, "火球符")
+	if not bool(hp_trade_result.get("success", false)) or run_state.current_hp != hp_before_trade - 1:
+		return false
+	var exchange_option: Dictionary = (trade_offer.get("exchange_option", {}) as Dictionary)
+	var total_cards_before_exchange: int = run_state.deck_ids.size() + run_state.reserve_ids.size()
+	var reserve_trade_result: Dictionary = run_state.apply_trade_reserve_reward(
+		int(exchange_option.get("reserve_index", -1)),
+		str(exchange_option.get("offered_id", "")),
+		str(exchange_option.get("card_id", ""))
+	)
+	if not bool(reserve_trade_result.get("success", false)) or run_state.deck_ids.size() + run_state.reserve_ids.size() != total_cards_before_exchange:
+		return false
 	var treasure_rewards := run_state.treasure_card_rewards()
 	if treasure_rewards.size() < 1:
 		return false
 	for treasure_card_id in treasure_rewards:
 		if CardDatabaseScript.get_card(str(treasure_card_id)).is_empty():
 			return false
-		if CardDatabaseScript.sell_price(str(treasure_card_id)) <= 0:
+		if CardPoolDatabaseScript.sell_price(str(treasure_card_id)) <= 0:
 			return false
+	var total_cards_before_treasure: int = run_state.deck_ids.size() + run_state.reserve_ids.size()
+	var treasure_result: Dictionary = run_state.apply_treasure_card_reward(str(treasure_rewards[0]))
+	if not bool(treasure_result.get("success", false)) or run_state.deck_ids.size() + run_state.reserve_ids.size() != total_cards_before_treasure + 1:
+		return false
+	if not str(treasure_result.get("message", "")).begins_with("宝箱："):
+		return false
+	run_state.current_hp = max(1, run_state.max_hp - 4)
+	var rest_result: Dictionary = run_state.apply_rest()
+	if not bool(rest_result.get("success", false)) or run_state.current_hp != run_state.max_hp:
+		return false
+	var stones_before_manual_spend: int = run_state.spirit_stones
 	run_state.add_spirit_stones(30)
-	if not run_state.spend_spirit_stones(12) or run_state.spirit_stones != 18:
+	if not run_state.spend_spirit_stones(12) or run_state.spirit_stones != stones_before_manual_spend + 18:
 		return false
 	var stock := run_state.generate_shop_stock()
-	return stock.size() > 0 and stock[0].has("card_id") and stock[0].has("price")
+	if stock.size() <= 0 or not stock[0].has("card_id") or not stock[0].has("price"):
+		return false
+	run_state.add_spirit_stones(200)
+	var refresh_cost: int = run_state.shop_start_refresh_cost()
+	var refresh_result: Dictionary = run_state.refresh_shop_stock(refresh_cost)
+	if not bool(refresh_result.get("success", false)) or int(refresh_result.get("next_refresh_cost", 0)) != refresh_cost * 2:
+		return false
+	var refreshed_stock: Array = (refresh_result.get("stock", []) as Array)
+	if refreshed_stock.is_empty():
+		return false
+	var shop_item: Dictionary = refreshed_stock[0]
+	var size_before_buy: int = run_state.deck_ids.size() + run_state.reserve_ids.size()
+	var stones_before_buy: int = run_state.spirit_stones
+	var buy_result: Dictionary = run_state.buy_shop_card(str(shop_item.get("card_id", "")), int(shop_item.get("price", 0)))
+	if not bool(buy_result.get("success", false)):
+		return false
+	if run_state.spirit_stones >= stones_before_buy:
+		return false
+	if run_state.deck_ids.size() + run_state.reserve_ids.size() != size_before_buy + 1:
+		return false
+	run_state.reserve_ids.append("火球符")
+	var stones_before_sell: int = run_state.spirit_stones
+	var reserve_before_sell: int = run_state.reserve_ids.size()
+	var sell_result: Dictionary = run_state.sell_reserve_card(run_state.reserve_ids.size() - 1)
+	return bool(sell_result.get("success", false)) and run_state.spirit_stones > stones_before_sell and run_state.reserve_ids.size() == reserve_before_sell - 1
 
 func _test_boss_settlement_and_meta_progression() -> bool:
 	var run_state = RunStateScript.new()
@@ -522,10 +892,17 @@ func _test_boss_settlement_and_meta_progression() -> bool:
 	run_state.complete_node(normal_node_id)
 	if run_state.run_cultivation_base != 3:
 		return false
-	run_state.complete_node(boss_node_id)
-	if run_state.is_complete():
+	var first_boss_result: Dictionary = run_state.apply_battle_completion(
+		boss_node_id,
+		run_state.deck_ids,
+		run_state.reserve_ids,
+		run_state.current_hp,
+		run_state.max_hp,
+		false
+	)
+	if not bool(first_boss_result.get("success", false)) or str(first_boss_result.get("flow", "")) != "map":
 		return false
-	if not run_state.advance_to_next_story_layer():
+	if not bool(first_boss_result.get("advanced_layer", false)):
 		return false
 	if run_state.realm_index != 1 or run_state.current_story_layer_number() != 2:
 		return false
@@ -538,8 +915,15 @@ func _test_boss_settlement_and_meta_progression() -> bool:
 			break
 	if second_boss_node_id == "":
 		return false
-	run_state.complete_node(second_boss_node_id)
-	if not run_state.advance_to_next_story_layer():
+	var second_boss_result: Dictionary = run_state.apply_battle_completion(
+		second_boss_node_id,
+		run_state.deck_ids,
+		run_state.reserve_ids,
+		run_state.current_hp,
+		run_state.max_hp,
+		false
+	)
+	if not bool(second_boss_result.get("success", false)) or not bool(second_boss_result.get("advanced_layer", false)):
 		return false
 	if run_state.realm_index != 2 or run_state.current_story_layer_number() != 3:
 		return false
@@ -550,10 +934,17 @@ func _test_boss_settlement_and_meta_progression() -> bool:
 			break
 	if third_boss_node_id == "":
 		return false
-	run_state.complete_node(third_boss_node_id)
-	if not run_state.is_complete():
+	var third_boss_result: Dictionary = run_state.apply_battle_completion(
+		third_boss_node_id,
+		run_state.deck_ids,
+		run_state.reserve_ids,
+		run_state.current_hp,
+		run_state.max_hp,
+		false
+	)
+	if not bool(third_boss_result.get("success", false)) or str(third_boss_result.get("flow", "")) != "settlement":
 		return false
-	var settlement: Dictionary = run_state.finish_run_and_save_progression(false)
+	var settlement: Dictionary = (third_boss_result.get("settlement", {}) as Dictionary)
 	var ok: bool = run_state.campaign_complete
 	ok = ok and int(settlement.get("base", 0)) == 33
 	ok = ok and int(settlement.get("awarded", 0)) == 50
@@ -563,6 +954,22 @@ func _test_boss_settlement_and_meta_progression() -> bool:
 	ok = ok and run_state.deck_score_limit == old_score_limit
 	ok = ok and run_state.available_nodes().is_empty()
 	return ok
+
+func _test_progression_database_boundary() -> bool:
+	if ProgressionDatabaseScript.title_for_points(0) != "练气":
+		return false
+	if ProgressionDatabaseScript.title_for_points(90) != "金丹":
+		return false
+	if not is_equal_approx(ProgressionDatabaseScript.layer_multiplier(2), 1.5):
+		return false
+	var sword_starting: Dictionary = ProgressionDatabaseScript.upgrade_definition("sword", "starting_sword")
+	if int(sword_starting.get("max_level", 0)) != 2:
+		return false
+	var talisman_defense: Dictionary = ProgressionDatabaseScript.upgrade_definition("talisman", "defense")
+	if int(talisman_defense.get("max_level", 0)) != 2:
+		return false
+	var compatibility: Dictionary = MetaProgressionScript.upgrade_definition("sword", "starting_sword")
+	return str(compatibility.get("name", "")) == str(sword_starting.get("name", ""))
 
 func _test_failed_run_settlement() -> bool:
 	var run_state = RunStateScript.new()
@@ -609,8 +1016,26 @@ func _test_exploration_battle_completion() -> bool:
 	if available.size() < 1:
 		return false
 	var node: Dictionary = available[0]
+	var payload: Dictionary = run_state.battle_start_payload(str(node.get("id", "")))
+	if not bool(payload.get("success", false)):
+		return false
+	if str(payload.get("node_id", "")) != str(node.get("id", "")):
+		return false
+	if int(payload.get("battle_number", 0)) != run_state.battle_number_for_node(node):
+		return false
+	if int(payload.get("spirit_reward", 0)) != run_state.battle_spirit_reward(node):
+		return false
+	if str(run_state.pending_node_id) != str(node.get("id", "")):
+		return false
 	var battle = BattleManagerScript.new()
-	battle.start_run_with_deck(run_state.job_id, run_state.deck_ids, run_state.battle_number_for_node(node), "normal", false, run_state.run_context())
+	battle.start_run_with_deck(
+		str(payload.get("job_id", "")),
+		(payload.get("deck_ids", []) as Array),
+		int(payload.get("battle_number", 1)),
+		str(payload.get("encounter_type", "normal")),
+		false,
+		(payload.get("run_context", {}) as Dictionary)
+	)
 	if battle.auto_advance_after_reward:
 		return false
 	if battle.player.hp != run_state.current_hp:
@@ -623,11 +1048,22 @@ func _test_exploration_battle_completion() -> bool:
 	battle.choose_reward(reward_id)
 	if battle.phase != "map_complete" or not (battle.master_deck_ids.has(reward_id) or battle.master_reserve_ids.has(reward_id)):
 		return false
-	run_state.update_deck(battle.master_deck_ids)
-	run_state.update_reserve(battle.master_reserve_ids)
-	run_state.update_life(battle.player.hp, battle.player.max_hp)
-	run_state.complete_node(str(node.get("id", "")))
-	return (run_state.deck_ids.has(reward_id) or run_state.reserve_ids.has(reward_id)) and run_state.current_hp == battle.player.hp and run_state.completed_node_ids.has(str(node.get("id", "")))
+	var stones_before: int = run_state.spirit_stones
+	var expected_stone_reward: int = run_state.battle_spirit_reward(node)
+	var result: Dictionary = run_state.apply_battle_completion(
+		str(node.get("id", "")),
+		battle.master_deck_ids,
+		battle.master_reserve_ids,
+		battle.player.hp,
+		battle.player.max_hp
+	)
+	return bool(result.get("success", false)) \
+		and str(result.get("flow", "")) == "map" \
+		and int(result.get("spirit_stones", 0)) == expected_stone_reward \
+		and run_state.spirit_stones == stones_before + expected_stone_reward \
+		and (run_state.deck_ids.has(reward_id) or run_state.reserve_ids.has(reward_id)) \
+		and run_state.current_hp == battle.player.hp \
+		and run_state.completed_node_ids.has(str(node.get("id", "")))
 
 func _test_battle_unit_framework() -> bool:
 	var battle = BattleManagerScript.new()
@@ -755,6 +1191,42 @@ func _test_enemy_encounter_architecture() -> bool:
 	if str(battle.current_enemy_deck_profile.get("deck_template_id", "")) == "":
 		return false
 	return battle.enemy_side.units.size() == battle.formation.enemy_units.size()
+
+func _test_battle_encounter_runtime_boundary() -> bool:
+	var encounter: Dictionary = BattleEncounterRuntimeScript.select_encounter(3, "elite", 1, 0, null)
+	if encounter.is_empty():
+		return false
+	var profile: Dictionary = BattleEncounterRuntimeScript.deck_profile(encounter)
+	if str(profile.get("deck_template_id", "")) == "":
+		return false
+	var encounter_deck: Array = (encounter.get("deck", []) as Array)
+	if BattleEncounterRuntimeScript.enemy_deck(encounter).size() != encounter_deck.size():
+		return false
+	var draw_count: int = BattleEncounterRuntimeScript.draw_per_turn(encounter, "elite")
+	if draw_count != int(encounter.get("draw_per_turn", 1)):
+		return false
+	if BattleEncounterRuntimeScript.card_play_limit(encounter, "elite") != int(encounter.get("card_play_limit", draw_count)):
+		return false
+	var enemy_data: Dictionary = BattleEncounterRuntimeScript.primary_enemy_data(encounter, 3)
+	if str(enemy_data.get("id", "")) == "" or int(enemy_data.get("max_hp", 0)) <= 0:
+		return false
+	var fallback_enemy_data: Dictionary = BattleEncounterRuntimeScript.primary_enemy_data({}, 1)
+	return str(fallback_enemy_data.get("id", "")) != "" and int(fallback_enemy_data.get("max_hp", 0)) > 0
+
+func _test_job_database_uses_character_pool() -> bool:
+	var sword_job: Dictionary = JobDatabaseScript.get_job("sword")
+	var sword_character: Dictionary = CharacterDatabaseScript.character_template(str(sword_job.get("character_id", "")))
+	if sword_job.is_empty() or sword_character.is_empty():
+		return false
+	if str(sword_job.get("character_id", "")) != "sword":
+		return false
+	if int(sword_job.get("max_hp", 0)) != int(sword_character.get("max_hp", -1)):
+		return false
+	if int(sword_job.get("attack", 0)) != int(sword_character.get("attack", -1)):
+		return false
+	if not ((sword_job.get("unit_tags", []) as Array).has("剑修")):
+		return false
+	return (sword_job.get("start_deck", []) as Array).size() >= DeckBuildRulesScript.min_deck_size()
 
 func _test_effect_steps_and_enemy_skill() -> bool:
 	var battle = BattleManagerScript.new()
@@ -940,6 +1412,23 @@ func _test_player_unit_actions() -> bool:
 	defend_battle.end_player_turn()
 	var expected_damage: int = max(0, defend_battle.enemy.attack - defended_value)
 	return defend_battle.phase == "player" and defend_battle.player.hp == hp_before - expected_damage and defend_battle.player.current_defense() == base_defense and not defend_battle.player_unit_action_used(defend_battle.player)
+
+func _test_enemy_ai_controller_boundary() -> bool:
+	var battle = BattleManagerScript.new()
+	battle.start_run("sword")
+	if battle.enemy_controller == null or battle.enemy_controller.get_script() != EnemyAIControllerScript:
+		return false
+	if battle.has_method("_select_enemy_hand_card") or battle.has_method("_enemy_spell_profile"):
+		return false
+	battle.enemy_side.deck_manager.hand.clear()
+	battle.enemy_side.deck_manager.hand.append(CardDatabaseScript.make_card("火球符"))
+	battle.enemy_side.deck_manager.hand.append(CardDatabaseScript.make_card("雷击符"))
+	var source_unit = battle.enemy_controller.side_card_source_unit(battle)
+	var selected_card: Dictionary = battle.enemy_controller.select_next_side_card(battle, source_unit)
+	if str(selected_card.get("id", "")) != "雷击符":
+		return false
+	var profile: Dictionary = battle.enemy_controller.side_card_profile("裂石符")
+	return int(profile.get("damage", 0)) == 7 and not (profile.get("post_steps", []) as Array).is_empty()
 
 func _test_enemy_side_action_sequence() -> bool:
 	var battle = BattleManagerScript.new()

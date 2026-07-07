@@ -2,6 +2,7 @@ extends SceneTree
 
 const BattleManagerScript = preload("res://scripts/battle/BattleManager.gd")
 const CardDatabaseScript = preload("res://scripts/data/CardDatabase.gd")
+const DeckBuildRulesScript = preload("res://scripts/run/DeckBuildRules.gd")
 
 const ROUTE := [
 	{"battle_number": 1, "type": "normal"},
@@ -57,7 +58,7 @@ func _run_case(deck_name: String, deck_ids: Array, runs: int) -> String:
 	var avg_fail_stage := 0.0 if losses <= 0 else float(fail_stage_total) / float(losses)
 	return "%s | three_layer | score %d | win %d/%d (%.1f%%) | avg_win_hp %.1f | avg_fail_layer %.1f | avg_fail_stage %.1f" % [
 		deck_name,
-		CardDatabaseScript.deck_score(deck_ids),
+		DeckBuildRulesScript.deck_score(deck_ids),
 		wins,
 		runs,
 		100.0 * float(wins) / float(runs),

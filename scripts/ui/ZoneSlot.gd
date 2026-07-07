@@ -6,6 +6,7 @@ signal slot_unhovered
 signal slot_pressed(card: Dictionary, anchor_position: Vector2)
 
 const DEFAULT_SLOT_SIZE := Vector2(70, 84)
+const CardDisplayRulesScript = preload("res://scripts/ui/CardDisplayRules.gd")
 const GLOW_MARGIN_RATIO := 0.18
 const MIN_GLOW_MARGIN := 8.0
 
@@ -145,18 +146,9 @@ func _gui_input(event: InputEvent) -> void:
 func _apply_style() -> void:
 	_ensure_nodes()
 	var style := StyleBoxFlat.new()
-	if not occupied:
-		style.bg_color = Color(0.08, 0.09, 0.10, 0.26)
-		style.border_color = Color(0.64, 0.69, 0.78, 0.46)
-	elif face_down:
-		style.bg_color = Color(0.06, 0.10, 0.22, 1.0)
-		style.border_color = Color(0.42, 0.62, 1.0, 1.0)
-	elif str(card_data.get("after_use", "")) == "equipment":
-		style.bg_color = Color(0.09, 0.22, 0.16, 1.0)
-		style.border_color = Color(0.40, 0.82, 0.52, 1.0)
-	else:
-		style.bg_color = Color(0.18, 0.17, 0.13, 1.0)
-		style.border_color = Color(0.84, 0.72, 0.42, 1.0)
+	var palette: Dictionary = CardDisplayRulesScript.zone_slot_palette(card_data, occupied, face_down)
+	style.bg_color = palette.get("bg", Color(0.08, 0.09, 0.10, 0.26))
+	style.border_color = palette.get("border", Color(0.64, 0.69, 0.78, 0.46))
 	if response_available:
 		style.border_color = Color(1.0, 0.92, 0.58, 1.0) if response_selected else Color(0.78, 0.86, 1.0, 1.0)
 	elif drop_available:

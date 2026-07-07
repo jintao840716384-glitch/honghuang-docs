@@ -20,6 +20,7 @@ var drop_available := false
 var drop_selected := false
 var floating_text_queue: Array = []
 var floating_text_active := false
+var portrait_placeholder_color := Color(0.13, 0.15, 0.18, 1.0)
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -38,6 +39,12 @@ func setup_actor(actor_name: String, portrait_text: String, hp: int, max_hp: int
 	extra_label.visible = extra != ""
 	intent_label.text = intent
 	intent_label.visible = intent != ""
+
+func apply_visual_profile(profile: Dictionary) -> void:
+	if profile.has("placeholder_color"):
+		portrait_placeholder_color = profile["placeholder_color"] as Color
+	if is_inside_tree():
+		_apply_actor_style()
 
 func set_selected(active: bool) -> void:
 	selected = active
@@ -119,7 +126,7 @@ func _apply_actor_style() -> void:
 		border = Color(0.98, 0.76, 0.28, 1.0)
 		border_width = 3
 	add_theme_stylebox_override("panel", _make_style(Color(0.08, 0.09, 0.10, 0.34), border, border_width, 8))
-	portrait_box.add_theme_stylebox_override("panel", _make_style(Color(0.13, 0.15, 0.18, 1.0), Color(0.54, 0.58, 0.66, 1.0), 2, 8))
+	portrait_box.add_theme_stylebox_override("panel", _make_style(portrait_placeholder_color, Color(0.54, 0.58, 0.66, 1.0), 2, 8))
 	hp_bar.add_theme_stylebox_override("background", _make_style(Color(0.15, 0.05, 0.05, 1.0), Color(0.34, 0.18, 0.18, 1.0), 1, 5))
 	hp_bar.add_theme_stylebox_override("fill", _make_style(Color(0.78, 0.08, 0.08, 1.0), Color(0.95, 0.26, 0.20, 1.0), 0, 5))
 	name_label.add_theme_font_size_override("font_size", 17)

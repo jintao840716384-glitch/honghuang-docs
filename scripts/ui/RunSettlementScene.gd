@@ -3,6 +3,8 @@ extends Control
 signal return_requested
 signal retry_requested
 
+const UIStyleFactoryScript = preload("res://scripts/ui/UIStyleFactory.gd")
+
 var title_label: Label
 var subtitle_label: Label
 var job_label: Label
@@ -167,22 +169,7 @@ func _format_multiplier(value: float) -> String:
 	return "%.2f" % value
 
 func _style_button(button: Button, bg: Color, border: Color) -> void:
-	button.add_theme_stylebox_override("normal", _panel_style(bg, border, 7, 1))
-	button.add_theme_stylebox_override("hover", _panel_style(bg.lightened(0.08), border.lightened(0.14), 7, 2))
-	button.add_theme_stylebox_override("pressed", _panel_style(bg.darkened(0.06), border.lightened(0.18), 7, 2))
-	button.add_theme_color_override("font_color", Color(0.94, 0.92, 0.86, 1.0))
+	UIStyleFactoryScript.apply_button_style(button, bg, border, 7, 1, 2, 2, Vector4(24, 24, 22, 22), 0, 0.14, 0.06, 0.18)
 
 func _panel_style(bg: Color, border: Color, radius: int, border_width: int) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = bg
-	style.border_color = border
-	style.set_border_width_all(border_width)
-	style.corner_radius_top_left = radius
-	style.corner_radius_top_right = radius
-	style.corner_radius_bottom_left = radius
-	style.corner_radius_bottom_right = radius
-	style.content_margin_left = 24
-	style.content_margin_right = 24
-	style.content_margin_top = 22
-	style.content_margin_bottom = 22
-	return style
+	return UIStyleFactoryScript.panel_style(bg, border, radius, border_width, Vector4(24, 24, 22, 22))

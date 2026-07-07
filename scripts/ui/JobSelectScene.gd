@@ -6,6 +6,8 @@ signal back_requested
 const JobDatabaseScript = preload("res://scripts/data/JobDatabase.gd")
 const MetaProgressionScript = preload("res://scripts/data/MetaProgression.gd")
 const AudioManagerScript = preload("res://scripts/audio/AudioManager.gd")
+const UIStyleFactoryScript = preload("res://scripts/ui/UIStyleFactory.gd")
+const CharacterVisualDatabaseScript = preload("res://scripts/assets/CharacterVisualDatabase.gd")
 
 var selected_job_id := "sword"
 var job_buttons: Dictionary = {}
@@ -187,31 +189,18 @@ func _select_job(job_id: String) -> void:
 		_style_button(button, bg, border)
 
 func _portrait_color(job_id: String) -> Color:
-	if job_id == "talisman":
-		return Color(0.08, 0.18, 0.14, 1.0)
-	return Color(0.14, 0.14, 0.18, 1.0)
+	var job: Dictionary = JobDatabaseScript.get_job(job_id)
+	if job.is_empty():
+		return Color(0.14, 0.14, 0.18, 1.0)
+	var profile: Dictionary = CharacterVisualDatabaseScript.profile_for_unit_data(job)
+	return profile.get("placeholder_color", Color(0.14, 0.14, 0.18, 1.0)) as Color
 
 func _play_audio(event_name: String) -> void:
 	if audio_manager != null and audio_manager.has_method("play_event"):
 		audio_manager.call("play_event", event_name)
 
 func _style_button(button: Button, bg: Color, border: Color) -> void:
-	button.add_theme_stylebox_override("normal", _panel_style(bg, border, 8, 2))
-	button.add_theme_stylebox_override("hover", _panel_style(bg.lightened(0.08), border.lightened(0.14), 8, 2))
-	button.add_theme_stylebox_override("pressed", _panel_style(bg.darkened(0.05), border.lightened(0.18), 8, 2))
-	button.add_theme_color_override("font_color", Color(0.94, 0.92, 0.86, 1.0))
+	UIStyleFactoryScript.apply_button_style(button, bg, border, 8, 2, 2, 2, Vector4(10, 10, 8, 8), 0, 0.14, 0.05, 0.18)
 
 func _panel_style(bg: Color, border: Color, radius: int, border_width: int) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = bg
-	style.border_color = border
-	style.set_border_width_all(border_width)
-	style.corner_radius_top_left = radius
-	style.corner_radius_top_right = radius
-	style.corner_radius_bottom_left = radius
-	style.corner_radius_bottom_right = radius
-	style.content_margin_left = 10
-	style.content_margin_right = 10
-	style.content_margin_top = 8
-	style.content_margin_bottom = 8
-	return style
+	return UIStyleFactoryScript.panel_style(bg, border, radius, border_width, Vector4(10, 10, 8, 8))

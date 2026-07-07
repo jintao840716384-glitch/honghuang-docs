@@ -3,17 +3,20 @@ class_name BattleManager
 
 signal combat_event(payload: Dictionary)
 
-const CardDatabaseScript = preload("res://scripts/data/CardDatabase.gd")
 const JobDatabaseScript = preload("res://scripts/data/JobDatabase.gd")
-const EnemyDatabaseScript = preload("res://scripts/data/EnemyDatabase.gd")
+const CardAcquisitionRulesScript = preload("res://scripts/run/CardAcquisitionRules.gd")
+const RewardServiceScript = preload("res://scripts/run/RewardService.gd")
 const PlayerStateScript = preload("res://scripts/battle/PlayerState.gd")
 const EnemyStateScript = preload("res://scripts/battle/EnemyState.gd")
 const DeckManagerScript = preload("res://scripts/battle/DeckManager.gd")
 const CardResolverScript = preload("res://scripts/battle/CardResolver.gd")
 const EffectResolverScript = preload("res://scripts/battle/EffectResolver.gd")
+const BattleEncounterRuntimeScript = preload("res://scripts/battle/BattleEncounterRuntime.gd")
 const BattleFormationScript = preload("res://scripts/battle/BattleFormation.gd")
 const BattleUnitScript = preload("res://scripts/battle/BattleUnit.gd")
 const BattleSideScript = preload("res://scripts/battle/BattleSide.gd")
+const EnemyAIControllerScript = preload("res://scripts/battle/EnemyAIController.gd")
+const BattleActionRulesScript = preload("res://scripts/battle/BattleActionRules.gd")
 
 var player: PlayerState
 var enemy: EnemyState
@@ -23,6 +26,7 @@ var enemy_side
 var deck: DeckManager
 var resolver: CardResolver
 var effect_resolver
+var enemy_controller
 var job_id := ""
 var battle_number := 1
 var turn_number := 0
@@ -62,7 +66,6 @@ const MAX_CHAIN_ACTIONS := 32
 const STATUS_BURN := "灼伤"
 const STATUS_DELAY := "迟滞"
 const STATUS_NEXT_DAMAGE_REDUCTION := "下次减伤"
-const ENEMY_CARD_PRIORITY := ["雷击符", "裂石符", "火球符", "金刃符", "缚身符", "破甲符", "铁木甲"]
 
 func _init() -> void:
 	player = PlayerStateScript.new()
@@ -73,6 +76,7 @@ func _init() -> void:
 	deck = DeckManagerScript.new()
 	resolver = CardResolverScript.new()
 	effect_resolver = EffectResolverScript.new()
+	enemy_controller = EnemyAIControllerScript.new()
 	rng.randomize()
 
 func start_run(selected_job_id: String) -> void:
@@ -250,23 +254,14 @@ func _cleanup_defeated_units() -> void:
 	_refresh_side_unit_refs()
 
 func _enemy_draw_for_current_encounter() -> int:
-	if not current_encounter_profile.is_empty():
-		return max(0, int(current_encounter_profile.get("draw_per_turn", 1)))
-	match current_encounter_type:
-		"elite":
-			return 2
-		"boss":
-			return 3
-	return 1
+	return BattleEncounterRuntimeScript.draw_per_turn(current_encounter_profile, current_encounter_type)
 
 func _enemy_deck_for_current_encounter() -> Array:
 	var profile: Dictionary = _enemy_deck_profile()
 	return profile.get("deck", []).duplicate()
 
 func _enemy_card_play_limit_for_current_encounter() -> int:
-	if not current_encounter_profile.is_empty():
-		return max(0, int(current_encounter_profile.get("card_play_limit", _enemy_draw_for_current_encounter())))
-	return _enemy_draw_for_current_encounter()
+	return BattleEncounterRuntimeScript.card_play_limit(current_encounter_profile, current_encounter_type)
 
 func _current_layer_index() -> int:
 	return max(1, current_realm_index + 1)
@@ -279,15 +274,10 @@ func _enemy_deck_profile() -> Dictionary:
 func _enemy_deck_profile_from_encounter() -> Dictionary:
 	if current_encounter_profile.is_empty():
 		current_encounter_profile = _select_encounter_profile()
-	return {
-		"id": str(current_encounter_profile.get("deck_template_id", current_encounter_profile.get("id", "empty"))),
-		"deck_template_id": str(current_encounter_profile.get("deck_template_id", current_encounter_profile.get("id", "empty"))),
-		"deck": current_encounter_profile.get("deck", []).duplicate(),
-		"theme_tags": current_encounter_profile.get("theme_tags", []).duplicate()
-	}
+	return BattleEncounterRuntimeScript.deck_profile(current_encounter_profile)
 
 func _select_encounter_profile() -> Dictionary:
-	return EnemyDatabaseScript.get_encounter_for_battle(
+	return BattleEncounterRuntimeScript.select_encounter(
 		battle_number,
 		current_encounter_type,
 		current_realm_index,
@@ -374,7 +364,7 @@ func player_unit_attack(unit_uid: String) -> void:
 	if player_unit_action_used(source_unit):
 		add_log("%s 本回合已经行动过。" % _unit_display_name(source_unit))
 		return
-	if enemy_target_count() > 1 and not _player_attack_uses_auto_targets(source_unit):
+	if enemy_target_count() > 1 and not BattleActionRulesScript.player_attack_uses_auto_targets(player, source_unit):
 		begin_enemy_target_selection({"type": "unit_attack", "source_uid": str(source_unit.uid)}, "选择攻击目标")
 		return
 	_perform_player_unit_attack(source_unit)
@@ -398,17 +388,17 @@ func _perform_player_unit_attack(source_unit) -> void:
 	check_victory_or_defeat()
 
 func _perform_basic_attack_hits(source_unit) -> int:
-	var targets: Array = _basic_attack_targets(source_unit)
+	var targets: Array = BattleActionRulesScript.basic_attack_targets(self, source_unit)
 	if targets.is_empty():
 		add_log("没有可攻击的敌方目标。")
-		_clear_consumed_attack_modifiers(source_unit)
+		BattleActionRulesScript.clear_consumed_attack_modifiers(player, source_unit)
 		return 0
 	var hits := 0
 	for target in targets:
 		if target == null or int(target.hp) <= 0:
 			continue
 		emit_combat_event({"type": "attack_started", "source": _unit_event_key(source_unit), "target": _unit_event_key(target)})
-		var damage: int = _basic_attack_damage(source_unit, target)
+		var damage: int = BattleActionRulesScript.basic_attack_damage(player, source_unit, target)
 		if damage <= 0:
 			add_log("%s 攻击 %s 未造成伤害。" % [_unit_display_name(source_unit), _unit_display_name(target)])
 			emit_combat_event({"type": "attack_finished", "source": _unit_event_key(source_unit), "target": _unit_event_key(target)})
@@ -420,41 +410,8 @@ func _perform_basic_attack_hits(source_unit) -> int:
 		_cleanup_defeated_units()
 		if formation.all_enemies_defeated():
 			break
-	_clear_consumed_attack_modifiers(source_unit)
+	BattleActionRulesScript.clear_consumed_attack_modifiers(player, source_unit)
 	return hits
-
-func _basic_attack_targets(source_unit) -> Array:
-	if source_unit == player and player.next_attack_all_enemies:
-		return formation.living_units(BattleUnitScript.TEAM_ENEMY)
-	if source_unit == player and player.next_attack_random_max > 0:
-		var candidates: Array = formation.living_units(BattleUnitScript.TEAM_ENEMY)
-		if candidates.is_empty():
-			return []
-		var min_hits: int = max(1, player.next_attack_random_min)
-		var max_hits: int = max(min_hits, player.next_attack_random_max)
-		var hit_count: int = rng.randi_range(min_hits, max_hits)
-		var result: Array = []
-		for _i in range(hit_count):
-			var living: Array = formation.living_units(BattleUnitScript.TEAM_ENEMY)
-			if living.is_empty():
-				break
-			result.append(living[rng.randi_range(0, living.size() - 1)])
-		return result
-	var target = selected_enemy_unit()
-	return [] if target == null else [target]
-
-func _basic_attack_damage(source_unit, target_unit) -> int:
-	var base_damage: int = max(0, source_unit.current_attack() - target_unit.current_defense())
-	if source_unit == player and player.next_attack_damage_multiplier > 1.0:
-		return int(floor(float(base_damage) * player.next_attack_damage_multiplier))
-	return base_damage
-
-func _player_attack_uses_auto_targets(source_unit) -> bool:
-	return source_unit == player and (player.next_attack_all_enemies or player.next_attack_random_max > 0)
-
-func _clear_consumed_attack_modifiers(source_unit) -> void:
-	if source_unit == player:
-		player.clear_next_attack_modifiers()
 
 func player_unit_defend(unit_uid: String) -> void:
 	if phase != "player":
@@ -473,8 +430,7 @@ func player_unit_defend(unit_uid: String) -> void:
 	if player_unit_action_used(source_unit):
 		add_log("%s 本回合已经行动过。" % _unit_display_name(source_unit))
 		return
-	var current_defense: int = source_unit.current_defense()
-	var defense_bonus: int = 1 if current_defense <= 0 else current_defense
+	var defense_bonus: int = BattleActionRulesScript.defense_bonus_for_unit(source_unit)
 	source_unit.temp_defense_delta += defense_bonus
 	_mark_player_unit_action_used(source_unit)
 	add_log("%s 进入防御，防御力 +%d，持续到下个玩家回合开始。" % [_unit_display_name(source_unit), defense_bonus])
@@ -712,10 +668,7 @@ func _start_enemy_turn() -> void:
 	enemy_cards_played_this_turn = 0
 	enemy_card_play_limit = _enemy_card_play_limit_for_current_encounter()
 	_draw_enemy_cards(enemy_side.draw_per_turn)
-	enemy_action_queue = formation.living_units(BattleUnitScript.TEAM_ENEMY).duplicate()
-	enemy_action_queue.sort_custom(func(a, b) -> bool:
-		return _unit_action_order(a) < _unit_action_order(b)
-	)
+	enemy_action_queue = enemy_controller.action_queue_for_units(formation.living_units(BattleUnitScript.TEAM_ENEMY))
 	if _try_enemy_play_next_side_card():
 		return
 	_continue_enemy_turn()
@@ -733,12 +686,11 @@ func _continue_enemy_turn() -> void:
 
 func _take_enemy_unit_turn(source_unit) -> void:
 	active_enemy_unit = source_unit
-	_clear_enemy_unit_temporary_defense(source_unit)
-	_tick_enemy_unit_cooldowns(source_unit)
+	enemy_controller.prepare_unit_turn(self, source_unit)
 	_apply_zone_enemy_action_start_effects(source_unit)
 	if check_victory_or_defeat():
 		return
-	var action: Dictionary = _next_enemy_action(source_unit)
+	var action: Dictionary = enemy_controller.next_unit_action(self, source_unit)
 	var intent := str(action.get("intent", ""))
 	add_log("%s 行动：%s。" % [_unit_display_name(source_unit), intent])
 	match action.get("kind", ""):
@@ -752,7 +704,7 @@ func _take_enemy_unit_turn(source_unit) -> void:
 		"defense_stance":
 			var defense_bonus: int = int(action.get("defense_delta", 0))
 			if defense_bonus <= 0:
-				defense_bonus = 1 if source_unit.current_defense() <= 0 else source_unit.current_defense()
+				defense_bonus = BattleActionRulesScript.defense_bonus_for_unit(source_unit)
 			source_unit.temp_defense_delta = defense_bonus
 			add_log("%s 防御力 +%d，持续 1 回合。" % [_unit_display_name(source_unit), source_unit.temp_defense_delta])
 			_finish_enemy_action()
@@ -768,37 +720,6 @@ func _take_enemy_unit_turn(source_unit) -> void:
 			_enemy_use_skill(source_unit, action)
 		_:
 			_finish_enemy_action()
-
-func _unit_action_order(unit) -> int:
-	if unit == null:
-		return 99
-	match int(unit.slot_index):
-		2:
-			return 0
-		1:
-			return 1
-		3:
-			return 2
-	return 10 + int(unit.slot_index)
-
-func _next_enemy_action(source_unit) -> Dictionary:
-	if source_unit != null and source_unit.has_method("next_action"):
-		var action: Dictionary = source_unit.call("next_action")
-		if not action.is_empty():
-			return action
-	if source_unit != null and source_unit.current_attack() > 0:
-		return {"kind": "normal_attack", "intent": "攻击"}
-	return {"kind": "wait", "intent": "待机"}
-
-func _tick_enemy_unit_cooldowns(source_unit) -> void:
-	if source_unit != null and source_unit.has_method("tick_skill_cooldowns"):
-		source_unit.call("tick_skill_cooldowns")
-
-func _clear_enemy_unit_temporary_defense(source_unit) -> void:
-	if source_unit != null and source_unit.has_method("clear_temporary_defense"):
-		source_unit.call("clear_temporary_defense")
-	elif source_unit != null:
-		source_unit.temp_defense_delta = 0
 
 func _enemy_attack(source_unit, power: int) -> void:
 	var target = choose_single_target(BattleUnitScript.TEAM_PLAYER)
@@ -858,35 +779,14 @@ func _try_enemy_play_next_side_card() -> bool:
 		return false
 	if enemy_cards_played_this_turn >= enemy_card_play_limit:
 		return false
-	var source_unit = _enemy_card_source_unit()
+	var source_unit = enemy_controller.side_card_source_unit(self)
 	if source_unit == null:
 		return false
-	var card: Dictionary = _select_enemy_hand_card(source_unit)
+	var card: Dictionary = enemy_controller.select_next_side_card(self, source_unit)
 	if card.is_empty():
 		return false
 	enemy_cards_played_this_turn += 1
 	return _play_enemy_card(source_unit, card)
-
-func _enemy_card_source_unit():
-	return formation.primary_enemy()
-
-func _select_enemy_hand_card(source_unit) -> Dictionary:
-	for card_id in ENEMY_CARD_PRIORITY:
-		for card_variant in enemy_side.deck_manager.hand:
-			var card: Dictionary = card_variant
-			if str(card.get("id", "")) == card_id and _enemy_card_playable(source_unit, card):
-				return card
-	return {}
-
-func _enemy_card_playable(source_unit, card: Dictionary) -> bool:
-	if source_unit == null or card.is_empty():
-		return false
-	match str(card.get("id", "")):
-		"铁木甲":
-			return source_unit.equipment.size() < int(source_unit.equipment_limit) and not source_unit.has_equipment("铁木甲")
-		"火球符", "金刃符", "雷击符", "裂石符", "破甲符", "缚身符":
-			return not formation.living_units(BattleUnitScript.TEAM_PLAYER).is_empty()
-	return false
 
 func _play_enemy_card(source_unit, card: Dictionary) -> bool:
 	if enemy_side == null or enemy_side.deck_manager == null:
@@ -920,7 +820,7 @@ func _apply_enemy_equipment_effect_recursive(source_unit, effect: Dictionary) ->
 				_apply_enemy_equipment_effect_recursive(source_unit, sub_effect)
 
 func _play_enemy_spell_card(source_unit, card: Dictionary) -> bool:
-	var profile: Dictionary = _enemy_spell_profile(str(card.get("id", "")))
+	var profile: Dictionary = enemy_controller.side_card_profile(str(card.get("id", "")))
 	if profile.is_empty():
 		_move_enemy_card_to_graveyard(card)
 		_finish_enemy_side_card()
@@ -940,35 +840,6 @@ func _play_enemy_spell_card(source_unit, card: Dictionary) -> bool:
 	event["enemy_side_card"] = true
 	open_timing_window(event)
 	return true
-
-func _enemy_spell_profile(card_id: String) -> Dictionary:
-	match card_id:
-		"火球符":
-			return {"damage": 4}
-		"金刃符":
-			return {"damage": 3}
-		"雷击符":
-			return {"damage": 8}
-		"裂石符":
-			return {
-				"damage": 7,
-				"post_steps": [
-					{"kind": "add_status", "target": "context_target", "status": "破甲", "value": 1, "source": "裂石符"}
-				]
-			}
-		"破甲符":
-			return {
-				"post_steps": [
-					{"kind": "add_status", "target": "context_target", "status": "破甲", "value": 2, "source": "破甲符"}
-				]
-			}
-		"缚身符":
-			return {
-				"post_steps": [
-					{"kind": "add_status", "target": "context_target", "status": "虚弱", "value": 2, "source": "缚身符"}
-				]
-			}
-	return {}
 
 func _move_enemy_card_to_graveyard(card: Dictionary) -> void:
 	if enemy_side == null or enemy_side.deck_manager == null:
@@ -1498,13 +1369,17 @@ func choose_reward(card_id: String) -> void:
 		return
 	if not reward_options.has(card_id):
 		return
-	var block_reason := CardDatabaseScript.deck_add_block_reason(card_id, master_deck_ids, deck_score_limit)
-	if block_reason == "":
-		master_deck_ids.append(card_id)
-		add_log("选择奖励：%s 加入卡组。" % card_id)
-	else:
-		master_reserve_ids.append(card_id)
-		add_log("选择奖励：%s 加入备牌区（%s）。" % [card_id, block_reason])
+	var result: Dictionary = CardAcquisitionRulesScript.card_gain_result(card_id, master_deck_ids, deck_score_limit)
+	match str(result.get("destination", "none")):
+		"deck":
+			master_deck_ids.append(card_id)
+			add_log("选择奖励：%s 加入卡组。" % card_id)
+		"reserve":
+			master_reserve_ids.append(card_id)
+			add_log("选择奖励：%s 加入备牌区（%s）。" % [card_id, str(result.get("reason", ""))])
+		_:
+			add_log(str(result.get("message", "未获得卡牌。")))
+			return
 	if not auto_advance_after_reward:
 		phase = "map_complete"
 		return
@@ -1517,10 +1392,7 @@ func choose_reward(card_id: String) -> void:
 func _enemy_data_for_current_battle() -> Dictionary:
 	if current_encounter_profile.is_empty():
 		current_encounter_profile = _select_encounter_profile()
-	var data: Dictionary = current_encounter_profile.get("primary_enemy", {})
-	if data.is_empty():
-		data = EnemyDatabaseScript.get_enemy_for_battle(battle_number)
-	return data.duplicate(true)
+	return BattleEncounterRuntimeScript.primary_enemy_data(current_encounter_profile, battle_number)
 
 func check_victory_or_defeat() -> bool:
 	_cleanup_defeated_units()
@@ -1541,15 +1413,7 @@ func check_victory_or_defeat() -> bool:
 
 func _generate_rewards() -> Array:
 	var unlock_tier: int = int(meta_bonuses.get("card_unlock_tier", 0))
-	var pool := CardDatabaseScript.reward_pool_for_job(job_id, current_encounter_type, unlock_tier)
-	var rewards: Array = []
-	var attempts := 0
-	while rewards.size() < 3 and attempts < 100 and not pool.is_empty():
-		attempts += 1
-		var card_id := str(pool[rng.randi_range(0, pool.size() - 1)])
-		if not rewards.has(card_id):
-			rewards.append(card_id)
-	return rewards
+	return RewardServiceScript.battle_card_rewards(job_id, current_encounter_type, unlock_tier, rng, 3)
 
 func _draw_player_cards(amount: int, reason := "") -> Array:
 	var drawn: Array = deck.draw(max(0, amount))

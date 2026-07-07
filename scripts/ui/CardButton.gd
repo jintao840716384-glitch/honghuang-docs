@@ -1,7 +1,7 @@
 extends Button
 class_name CardButton
 
-const CardDatabaseScript = preload("res://scripts/data/CardDatabase.gd")
+const CardDisplayRulesScript = preload("res://scripts/ui/CardDisplayRules.gd")
 const CARD_SIZE := Vector2(225, 315)
 
 signal card_pressed(uid: String)
@@ -163,26 +163,7 @@ func _update_pivot() -> void:
 	pivot_offset = size * 0.5
 
 func _type_text(card: Dictionary) -> String:
-	var card_type := str(card.get("type", ""))
-	var after_use := str(card.get("after_use", ""))
-	var base := card_type
-	if card_type == CardDatabaseScript.TYPE_DEFENSE:
-		base = "防御牌"
-	elif after_use == "equipment":
-		base = "装备牌"
-	elif after_use == "spell_zone":
-		base = "放置牌"
-	elif card_type == CardDatabaseScript.TYPE_SPELL:
-		base = "法术牌"
-	var tags: Array = card.get("tags", [])
-	var display_tags: Array = []
-	for tag in tags:
-		if display_tags.size() >= 2:
-			break
-		display_tags.append(str(tag))
-	if display_tags.is_empty():
-		return base
-	return "%s / %s" % [base, " / ".join(display_tags)]
+	return CardDisplayRulesScript.card_type_text(card, 2)
 
 func _body_text(card: Dictionary) -> String:
 	var lines: Array = []
@@ -210,21 +191,7 @@ func _description_lines(description: String) -> Array:
 	return result
 
 func _footer_text(card: Dictionary) -> String:
-	var parts: Array = []
-	var effect: Dictionary = card.get("effect", {})
-	var sword_cost := int(effect.get("sword_cost", 0))
-	if sword_cost > 0:
-		parts.append("消耗：剑势 %d" % sword_cost)
-	match str(card.get("after_use", "")):
-		"graveyard":
-			parts.append("去向：墓地")
-		"exile":
-			parts.append("去向：除外")
-		"spell_zone":
-			parts.append("放置：法防区")
-		"equipment":
-			parts.append("放置：装备区")
-	return " / ".join(parts)
+	return CardDisplayRulesScript.footer_text(card)
 
 func _name_font_size(display_text: String) -> int:
 	if display_text.length() >= 6:
@@ -251,27 +218,10 @@ func _center_font_size(display_text: String) -> int:
 	return 40
 
 func _apply_card_style(card: Dictionary) -> void:
-	var card_type := str(card.get("type", ""))
-	var after_use := str(card.get("after_use", ""))
-	var bg := Color(0.28, 0.16, 0.10, 1.0)
-	var border := Color(0.95, 0.60, 0.30, 1.0)
-	var name_color := Color(1.0, 0.88, 0.68, 1.0)
-	if card_type == CardDatabaseScript.TYPE_DEFENSE:
-		bg = Color(0.08, 0.12, 0.24, 1.0)
-		border = Color(0.36, 0.58, 1.0, 1.0)
-		name_color = Color(0.78, 0.88, 1.0, 1.0)
-	elif after_use == "equipment":
-		bg = Color(0.09, 0.22, 0.16, 1.0)
-		border = Color(0.40, 0.82, 0.52, 1.0)
-		name_color = Color(0.76, 1.0, 0.82, 1.0)
-	elif after_use == "spell_zone":
-		bg = Color(0.18, 0.17, 0.13, 1.0)
-		border = Color(0.84, 0.72, 0.42, 1.0)
-		name_color = Color(1.0, 0.90, 0.64, 1.0)
-	elif card_type == "奖励":
-		bg = Color(0.23, 0.17, 0.11, 1.0)
-		border = Color(0.92, 0.66, 0.36, 1.0)
-		name_color = Color(1.0, 0.90, 0.70, 1.0)
+	var palette: Dictionary = CardDisplayRulesScript.card_palette(card)
+	var bg: Color = palette.get("bg", Color(0.28, 0.16, 0.10, 1.0))
+	var border: Color = palette.get("border", Color(0.95, 0.60, 0.30, 1.0))
+	var name_color: Color = palette.get("name_color", Color(1.0, 0.88, 0.68, 1.0))
 	add_theme_stylebox_override("normal", _make_style(bg, border, 2))
 	add_theme_stylebox_override("hover", _make_style(bg.lightened(0.08), border.lightened(0.15), 3))
 	add_theme_stylebox_override("pressed", _make_style(bg.darkened(0.05), border.lightened(0.25), 3))

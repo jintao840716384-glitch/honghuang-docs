@@ -1,38 +1,34 @@
 extends Node
 class_name AudioManager
 
+const AudioEventDatabaseScript = preload("res://scripts/audio/AudioEventDatabase.gd")
+const GameSettingsScript = preload("res://scripts/settings/GameSettings.gd")
+const SettingsStoreScript = preload("res://scripts/settings/SettingsStore.gd")
+
 const SAMPLE_RATE := 44100
 const MASTER_VOLUME_DB := -11.0
 
-const EVENTS := {
-	"card_hover": {"volume": -24.0, "cooldown_ms": 28},
-	"card_play": {"volume": -14.0, "cooldown_ms": 20},
-	"card_set": {"volume": -13.0, "cooldown_ms": 30},
-	"card_place": {"volume": -13.0, "cooldown_ms": 30},
-	"card_equip": {"volume": -12.0, "cooldown_ms": 30},
-	"card_break": {"volume": -11.0, "cooldown_ms": 50},
-	"attack": {"volume": -14.0, "cooldown_ms": 60},
-	"hit": {"volume": -10.0, "cooldown_ms": 35},
-	"defense_activate": {"volume": -12.0, "cooldown_ms": 30},
-	"chain_start": {"volume": -16.0, "cooldown_ms": 80},
-	"chain_resolve": {"volume": -15.0, "cooldown_ms": 35},
-	"heal": {"volume": -13.0, "cooldown_ms": 40},
-	"victory": {"volume": -13.0, "cooldown_ms": 100},
-	"ui_click": {"volume": -22.0, "cooldown_ms": 20},
-	"ui_confirm": {"volume": -18.0, "cooldown_ms": 20}
-}
-
 var players: Dictionary = {}
 var last_play_msec: Dictionary = {}
+var sfx_volume := GameSettingsScript.DEFAULT_SFX_VOLUME
 
 func _ready() -> void:
+	_apply_saved_audio_settings()
 	_build_placeholder_streams()
 
+func set_sfx_volume(value: float) -> void:
+	sfx_volume = clamp(value, 0.0, 1.0)
+	for event_name_variant in players.keys():
+		var event_name := str(event_name_variant)
+		var player := players.get(event_name, null) as AudioStreamPlayer
+		if player != null:
+			_apply_player_volume(event_name, player)
+
 func play_event(event_name: String) -> void:
-	if not EVENTS.has(event_name):
+	if not AudioEventDatabaseScript.has_event(event_name):
 		return
 	var now := Time.get_ticks_msec()
-	var cooldown := int(EVENTS[event_name].get("cooldown_ms", 0))
+	var cooldown := AudioEventDatabaseScript.cooldown_ms(event_name)
 	if last_play_msec.has(event_name) and now - int(last_play_msec[event_name]) < cooldown:
 		return
 	last_play_msec[event_name] = now
@@ -43,37 +39,71 @@ func play_event(event_name: String) -> void:
 	player.play()
 
 func register_stream(event_name: String, stream: AudioStream) -> void:
-	if not EVENTS.has(event_name):
+	if not AudioEventDatabaseScript.has_event(event_name):
 		return
 	var player := _player_for(event_name)
 	player.stream = stream
 
 func _build_placeholder_streams() -> void:
-	register_stream("card_hover", _noise_sweep(0.060, 0.34, 0.70, 0.20, 1001))
-	register_stream("card_play", _whoosh(0.145, 840.0, 180.0, 0.46, 1002))
-	register_stream("card_set", _thump_chime(0.135, 260.0, 740.0, 0.50, 1003))
-	register_stream("card_place", _thump_chime(0.160, 330.0, 1040.0, 0.48, 1004))
-	register_stream("card_equip", _chime(0.190, [440.0, 880.0, 1320.0], 0.45))
-	register_stream("card_break", _break_noise(0.260, 0.72, 1005))
-	register_stream("attack", _whoosh(0.130, 520.0, 110.0, 0.42, 1006))
-	register_stream("hit", _impact(0.150, 0.70, 1007))
-	register_stream("defense_activate", _chime(0.180, [520.0, 780.0, 1180.0], 0.42))
-	register_stream("chain_start", _chime(0.210, [330.0, 660.0, 990.0], 0.34))
-	register_stream("chain_resolve", _chime(0.150, [720.0, 1080.0], 0.32))
-	register_stream("heal", _chime(0.240, [520.0, 760.0, 1040.0], 0.38))
-	register_stream("victory", _arpeggio(0.420, [520.0, 660.0, 880.0, 1320.0], 0.38))
-	register_stream("ui_click", _click(0.040, 1240.0, 0.24))
-	register_stream("ui_confirm", _click(0.060, 860.0, 0.34))
+	for event_id_variant in AudioEventDatabaseScript.one_shot_event_ids():
+		var event_id := str(event_id_variant)
+		var stream := _placeholder_stream_for_event(event_id)
+		if stream != null:
+			register_stream(event_id, stream)
 
 func _player_for(event_name: String) -> AudioStreamPlayer:
 	var player := players.get(event_name, null) as AudioStreamPlayer
 	if player == null:
 		player = AudioStreamPlayer.new()
 		player.name = "Sfx_%s" % event_name
-		player.volume_db = MASTER_VOLUME_DB + float(EVENTS[event_name].get("volume", -16.0))
 		add_child(player)
 		players[event_name] = player
+	_apply_player_volume(event_name, player)
 	return player
+
+func _apply_player_volume(event_name: String, player: AudioStreamPlayer) -> void:
+	if sfx_volume <= 0.001:
+		player.volume_db = -80.0
+		return
+	player.volume_db = MASTER_VOLUME_DB + AudioEventDatabaseScript.volume_db(event_name) + linear_to_db(sfx_volume)
+
+func _apply_saved_audio_settings() -> void:
+	var audio: Dictionary = GameSettingsScript.audio_settings(SettingsStoreScript.load_settings())
+	set_sfx_volume(float(audio.get("sfx_volume", GameSettingsScript.DEFAULT_SFX_VOLUME)))
+
+func _placeholder_stream_for_event(event_name: String) -> AudioStream:
+	match AudioEventDatabaseScript.placeholder_id(event_name):
+		"card_hover":
+			return _noise_sweep(0.060, 0.34, 0.70, 0.20, 1001)
+		"card_play":
+			return _whoosh(0.145, 840.0, 180.0, 0.46, 1002)
+		"card_set":
+			return _thump_chime(0.135, 260.0, 740.0, 0.50, 1003)
+		"card_place":
+			return _thump_chime(0.160, 330.0, 1040.0, 0.48, 1004)
+		"card_equip":
+			return _chime(0.190, [440.0, 880.0, 1320.0], 0.45)
+		"card_break":
+			return _break_noise(0.260, 0.72, 1005)
+		"attack":
+			return _whoosh(0.130, 520.0, 110.0, 0.42, 1006)
+		"hit":
+			return _impact(0.150, 0.70, 1007)
+		"defense_activate":
+			return _chime(0.180, [520.0, 780.0, 1180.0], 0.42)
+		"chain_start":
+			return _chime(0.210, [330.0, 660.0, 990.0], 0.34)
+		"chain_resolve":
+			return _chime(0.150, [720.0, 1080.0], 0.32)
+		"heal":
+			return _chime(0.240, [520.0, 760.0, 1040.0], 0.38)
+		"victory":
+			return _arpeggio(0.420, [520.0, 660.0, 880.0, 1320.0], 0.38)
+		"ui_click":
+			return _click(0.040, 1240.0, 0.24)
+		"ui_confirm":
+			return _click(0.060, 860.0, 0.34)
+	return null
 
 func _stream_from_samples(samples: PackedFloat32Array) -> AudioStreamWAV:
 	var data := PackedByteArray()

@@ -484,16 +484,21 @@ func resolve_spell_effect(battle, card: Dictionary, multiplier := 1.0, context :
 		"direct_damage":
 			var damage: int = _scaled(int(effect.get("value", 0)), multiplier)
 			var ignore_defense: bool = bool(effect.get("ignore_defense", false))
-			var target_units: Array = battle.resolve_target_units("enemy", battle.player, context)
-			for target_unit in target_units:
-				if target_unit == null:
-					continue
-				var final_damage: int = damage if ignore_defense else max(0, damage - target_unit.current_defense())
-				battle.apply_damage_to_unit(target_unit, final_damage, str(card.get("name", "")))
+			var damage_results: Array = battle.effect_resolver.apply_step(battle, battle.player, {
+				"kind": "damage",
+				"target": str(effect.get("target", "enemy")),
+				"value": damage,
+				"ignore_defense": ignore_defense,
+				"source": card.get("name", "")
+			}, context)
+			for result_variant in damage_results:
+				var result: Dictionary = result_variant
+				var final_damage: int = int(result.get("value", 0))
+				var target_name := str(result.get("target_name", "目标"))
 				if ignore_defense:
-					battle.add_log("%s：对 %s 造成 %d 点无视防御伤害。" % [card.get("name", ""), target_unit.name, final_damage])
+					battle.add_log("%s：对 %s 造成 %d 点无视防御伤害。" % [card.get("name", ""), target_name, final_damage])
 				else:
-					battle.add_log("%s：对 %s 造成 %d 点伤害。" % [card.get("name", ""), target_unit.name, final_damage])
+					battle.add_log("%s：对 %s 造成 %d 点伤害。" % [card.get("name", ""), target_name, final_damage])
 		"heal":
 			var amount := _scaled(int(effect.get("value", 0)), multiplier)
 			var before: int = battle.player.hp
@@ -537,13 +542,20 @@ func resolve_spell_effect(battle, card: Dictionary, multiplier := 1.0, context :
 			}], context)
 		"random_enemy_damage":
 			var damage: int = _scaled(int(effect.get("value", 0)), multiplier)
-			var enemies: Array = battle.formation.living_units("enemy")
-			if enemies.is_empty():
-				return
-			var target_unit = enemies[battle.rng.randi_range(0, enemies.size() - 1)]
-			var final_damage: int = damage if bool(effect.get("ignore_defense", false)) else max(0, damage - target_unit.current_defense())
-			battle.apply_damage_to_unit(target_unit, final_damage, str(card.get("name", "")))
-			battle.add_log("%s：随机命中 %s，造成 %d 点伤害。" % [card.get("name", ""), target_unit.name, final_damage])
+			var damage_results: Array = battle.effect_resolver.apply_step(battle, battle.player, {
+				"kind": "damage",
+				"target": "random_enemy",
+				"value": damage,
+				"ignore_defense": bool(effect.get("ignore_defense", false)),
+				"source": card.get("name", "")
+			}, context)
+			for result_variant in damage_results:
+				var result: Dictionary = result_variant
+				battle.add_log("%s：随机命中 %s，造成 %d 点伤害。" % [
+					card.get("name", ""),
+					str(result.get("target_name", "目标")),
+					int(result.get("value", 0))
+				])
 		"summon":
 			var count: int = max(0, _scaled(int(effect.get("count", 1)), multiplier))
 			battle.effect_resolver.apply_steps(battle, battle.player, [{

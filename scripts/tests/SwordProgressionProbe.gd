@@ -2,6 +2,8 @@ extends SceneTree
 
 const BattleManagerScript = preload("res://scripts/battle/BattleManager.gd")
 const CardDatabaseScript = preload("res://scripts/data/CardDatabase.gd")
+const CardPoolDatabaseScript = preload("res://scripts/data/CardPoolDatabase.gd")
+const DeckBuildRulesScript = preload("res://scripts/run/DeckBuildRules.gd")
 
 const PLAYER_BASE_HP := 35
 const JOB_ID := "sword"
@@ -88,10 +90,10 @@ func _init() -> void:
 
 func _print_pool_audit() -> void:
 	for tier in [0, 1, 2]:
-		var normal_pool: Array = CardDatabaseScript.reward_pool_for_job(JOB_ID, "normal", int(tier))
-		var elite_pool: Array = CardDatabaseScript.reward_pool_for_job(JOB_ID, "elite", int(tier))
-		var boss_pool: Array = CardDatabaseScript.reward_pool_for_job(JOB_ID, "boss", int(tier))
-		var packs: Array = CardDatabaseScript.unlocked_packs_for_job(JOB_ID, int(tier))
+		var normal_pool: Array = CardPoolDatabaseScript.reward_pool_for_job(JOB_ID, "normal", int(tier))
+		var elite_pool: Array = CardPoolDatabaseScript.reward_pool_for_job(JOB_ID, "elite", int(tier))
+		var boss_pool: Array = CardPoolDatabaseScript.reward_pool_for_job(JOB_ID, "boss", int(tier))
+		var packs: Array = CardPoolDatabaseScript.unlocked_packs_for_job(JOB_ID, int(tier))
 		print("pack_tier %d | packs %s | normal %d | elite %d | boss %d" % [
 			tier,
 			_pack_summary(packs),
@@ -102,17 +104,17 @@ func _print_pool_audit() -> void:
 	var locked_starter_cards: Array = []
 	for card_id_variant in STARTER_SWORD:
 		var card_id := str(card_id_variant)
-		if not CardDatabaseScript.card_unlocked_for_job(card_id, JOB_ID, 0):
+		if not CardPoolDatabaseScript.card_unlocked_for_job(card_id, JOB_ID, 0):
 			locked_starter_cards.append(card_id)
 	print("starter_sword | score %d | reward_locked_at_pack1 %s" % [
-		CardDatabaseScript.deck_score(STARTER_SWORD),
+		DeckBuildRulesScript.deck_score(STARTER_SWORD),
 		"none" if locked_starter_cards.is_empty() else ", ".join(locked_starter_cards)
 	])
 
 func _pack_summary(packs: Array) -> String:
 	var names: Array = []
 	for pack_variant in packs:
-		names.append(CardDatabaseScript.pack_display_name(str(pack_variant)))
+		names.append(CardPoolDatabaseScript.pack_display_name(str(pack_variant)))
 	return ",".join(names)
 
 func _run_case(scenario: Dictionary, runs: int, scenario_index: int) -> String:
@@ -344,9 +346,9 @@ func _pick_reward(options: Array, deck: Array, score_limit: int) -> String:
 	}
 	for id_variant in options:
 		var id := str(id_variant)
-		if not CardDatabaseScript.can_add_card_to_deck(id, deck, score_limit):
+		if not DeckBuildRulesScript.can_add_card_to_deck(id, deck, score_limit):
 			continue
-		var score: int = int(weights.get(id, 0)) - CardDatabaseScript.card_score(id)
+		var score: int = int(weights.get(id, 0)) - DeckBuildRulesScript.card_score(id)
 		if score > best_score:
 			best_score = score
 			best_id = id
