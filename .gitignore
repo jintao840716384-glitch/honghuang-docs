@@ -18,3 +18,7 @@ backups/
 # Codex/local agent scratch space
 .agents/
 .backup_git/
+/.codex/config.toml
+
+# Local visual asset inbox
+/视觉素材临时文件夹/
