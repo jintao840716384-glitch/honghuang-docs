@@ -1,0 +1,360 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/BattleUI.gd" id="1_battle"]
+[ext_resource type="PackedScene" path="res://scenes/battle/RewardScene.tscn" id="2_reward"]
+[ext_resource type="PackedScene" path="res://scenes/battle/CombatActorView.tscn" id="4_actor"]
+[ext_resource type="PackedScene" path="res://scenes/ui/CardTooltip.tscn" id="5_tooltip"]
+[ext_resource type="PackedScene" path="res://scenes/ui/CardPileViewer.tscn" id="6_viewer"]
+
+[node name="BattleScene" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_battle")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.045, 0.05, 0.058, 1)
+
+[node name="BattleNumberLabel" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -80.0
+offset_top = 14.0
+offset_right = 80.0
+offset_bottom = 42.0
+grow_horizontal = 2
+text = "第 1 场"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="PlayerActor" parent="." instance=ExtResource("4_actor")]
+layout_mode = 1
+anchor_left = 0.2
+anchor_right = 0.2
+offset_left = -119.0
+offset_top = 192.0
+offset_right = 119.0
+offset_bottom = 478.0
+
+[node name="EnemyActor" parent="." instance=ExtResource("4_actor")]
+layout_mode = 1
+anchor_left = 0.7
+anchor_right = 0.7
+offset_left = -119.0
+offset_top = 190.0
+offset_right = 119.0
+offset_bottom = 476.0
+
+[node name="SpellDefenseZone" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchor_left = 0.18
+anchor_right = 0.18
+offset_left = -205.0
+offset_top = 552.0
+offset_right = 205.0
+offset_bottom = 640.0
+theme_override_constants/separation = 5
+alignment = 1
+
+[node name="EquipmentZone" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchor_left = 0.2
+anchor_right = 0.2
+offset_left = -194.0
+offset_top = 192.0
+offset_right = -124.0
+offset_bottom = 478.0
+
+[node name="EquipmentReplaceHintPanel" type="PanelContainer" parent="."]
+visible = false
+custom_minimum_size = Vector2(220, 70)
+layout_mode = 1
+anchor_left = 0.2
+anchor_right = 0.2
+offset_left = -194.0
+offset_top = 488.0
+offset_right = 26.0
+offset_bottom = 558.0
+z_index = 90
+
+[node name="EquipmentReplaceHintLayout" type="HBoxContainer" parent="EquipmentReplaceHintPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="EquipmentReplaceHintLabel" type="Label" parent="EquipmentReplaceHintPanel/EquipmentReplaceHintLayout"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "替换：选择要卸下的装备"
+vertical_alignment = 1
+autowrap_mode = 3
+
+[node name="EquipmentReplaceCancelButton" type="Button" parent="EquipmentReplaceHintPanel/EquipmentReplaceHintLayout"]
+custom_minimum_size = Vector2(58, 30)
+layout_mode = 2
+text = "取消"
+
+[node name="ActionRow" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 26.0
+offset_top = -230.0
+offset_right = 186.0
+offset_bottom = -174.0
+grow_vertical = 0
+theme_override_constants/separation = 8
+
+[node name="NormalAttackButton" type="Button" parent="ActionRow"]
+visible = false
+custom_minimum_size = Vector2(104, 36)
+layout_mode = 2
+text = "普通攻击"
+
+[node name="EndTurnButton" type="Button" parent="ActionRow"]
+custom_minimum_size = Vector2(156, 50)
+layout_mode = 2
+text = "结束回合"
+
+[node name="RestartButton" type="Button" parent="."]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -92.0
+offset_top = 14.0
+offset_right = -18.0
+offset_bottom = 46.0
+grow_horizontal = 0
+text = "重开"
+
+[node name="HandContainer" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -640.0
+offset_top = -245.0
+offset_right = 640.0
+offset_bottom = 70.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="DeckPileButton" type="Button" parent="."]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -118.0
+offset_top = -74.0
+offset_right = -26.0
+offset_bottom = -18.0
+grow_horizontal = 0
+grow_vertical = 0
+text = "卡组\n0"
+
+[node name="GraveyardPileButton" type="Button" parent="."]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 26.0
+offset_top = -70.0
+offset_right = 116.0
+offset_bottom = -20.0
+grow_vertical = 0
+text = "墓地\n0"
+
+[node name="ExilePileButton" type="Button" parent="."]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 26.0
+offset_top = -128.0
+offset_right = 116.0
+offset_bottom = -78.0
+grow_vertical = 0
+text = "除外\n0"
+
+[node name="LogToggleButton" type="Button" parent="."]
+layout_mode = 1
+anchors_preset = 6
+anchor_left = 1.0
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = -72.0
+offset_top = -18.0
+offset_right = -16.0
+offset_bottom = 18.0
+grow_horizontal = 0
+grow_vertical = 2
+text = "日志"
+
+[node name="LogPanel" type="PanelContainer" parent="."]
+visible = false
+custom_minimum_size = Vector2(320, 420)
+layout_mode = 1
+anchors_preset = 6
+anchor_left = 1.0
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = -344.0
+offset_top = -210.0
+offset_right = -18.0
+offset_bottom = 210.0
+grow_horizontal = 0
+grow_vertical = 2
+z_index = 60
+
+[node name="LogLayout" type="VBoxContainer" parent="LogPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="LogHeaderRow" type="HBoxContainer" parent="LogPanel/LogLayout"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="LogTitleLabel" type="Label" parent="LogPanel/LogLayout/LogHeaderRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "战斗日志"
+
+[node name="LogCloseButton" type="Button" parent="LogPanel/LogLayout/LogHeaderRow"]
+layout_mode = 2
+text = "收起"
+
+[node name="LogScroll" type="ScrollContainer" parent="LogPanel/LogLayout"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="LogContainer" type="VBoxContainer" parent="LogPanel/LogLayout/LogScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ChoicePanel" type="PanelContainer" parent="."]
+visible = false
+custom_minimum_size = Vector2(520, 260)
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -260.0
+offset_top = -150.0
+offset_right = 260.0
+offset_bottom = 150.0
+grow_horizontal = 2
+grow_vertical = 2
+z_index = 70
+
+[node name="ChoiceLayout" type="VBoxContainer" parent="ChoicePanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ChoiceTitleLabel" type="Label" parent="ChoicePanel/ChoiceLayout"]
+layout_mode = 2
+text = "请选择"
+autowrap_mode = 3
+
+[node name="ChoiceContainer" type="GridContainer" parent="ChoicePanel/ChoiceLayout"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 10
+columns = 3
+
+[node name="RewardScene" parent="." instance=ExtResource("2_reward")]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -390.0
+offset_top = -230.0
+offset_right = 390.0
+offset_bottom = 215.0
+grow_horizontal = 2
+grow_vertical = 2
+z_index = 75
+
+[node name="EquipmentConfirmPanel" type="PanelContainer" parent="."]
+visible = false
+custom_minimum_size = Vector2(180, 82)
+layout_mode = 1
+offset_left = 620.0
+offset_top = 320.0
+offset_right = 800.0
+offset_bottom = 402.0
+z_index = 220
+
+[node name="ConfirmLayout" type="VBoxContainer" parent="EquipmentConfirmPanel"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="ConfirmNameLabel" type="Label" parent="EquipmentConfirmPanel/ConfirmLayout"]
+layout_mode = 2
+text = "替换装备？"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ConfirmButtonRow" type="HBoxContainer" parent="EquipmentConfirmPanel/ConfirmLayout"]
+layout_mode = 2
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="ConfirmActivateButton" type="Button" parent="EquipmentConfirmPanel/ConfirmLayout/ConfirmButtonRow"]
+custom_minimum_size = Vector2(70, 30)
+layout_mode = 2
+text = "替换"
+
+[node name="ConfirmCancelButton" type="Button" parent="EquipmentConfirmPanel/ConfirmLayout/ConfirmButtonRow"]
+custom_minimum_size = Vector2(70, 30)
+layout_mode = 2
+text = "取消"
+
+[node name="PileViewer" parent="." instance=ExtResource("6_viewer")]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -360.0
+offset_top = -220.0
+offset_right = 360.0
+offset_bottom = 220.0
+grow_horizontal = 2
+grow_vertical = 2
+z_index = 120
+
+[node name="CardTooltip" parent="." instance=ExtResource("5_tooltip")]
+visible = false
+layout_mode = 1
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 312.0
+offset_bottom = 180.0
+z_index = 200

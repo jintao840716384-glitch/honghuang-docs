@@ -1,40 +1,13 @@
 extends RefCounted
 class_name MapGenerator
 
+const MapContentDatabaseScript = preload("res://scripts/data/MapContentDatabase.gd")
+const LocalizationDatabaseScript = preload("res://scripts/localization/LocalizationDatabase.gd")
+const LocalizationServiceScript = preload("res://scripts/localization/LocalizationService.gd")
+
 static func generate() -> Array:
-	var floor_layouts := [
-		[
-			{"lane": -1.0, "type": "normal"},
-			{"lane": 0.0, "type": "normal"},
-			{"lane": 1.0, "type": "normal"}
-		],
-		[
-			{"lane": -0.6, "type": "normal"},
-			{"lane": 0.8, "type": "event"}
-		],
-		[
-			{"lane": -1.1, "type": "normal"},
-			{"lane": 0.0, "type": "elite"},
-			{"lane": 1.1, "type": "shop"}
-		],
-		[
-			{"lane": -0.7, "type": "event"},
-			{"lane": 0.0, "type": "treasure"},
-			{"lane": 0.7, "type": "elite"}
-		],
-		[
-			{"lane": -1.0, "type": "elite"},
-			{"lane": 0.0, "type": "rest"},
-			{"lane": 1.0, "type": "normal"}
-		],
-		[
-			{"lane": -0.55, "type": "elite"},
-			{"lane": 0.55, "type": "event"}
-		],
-		[
-			{"lane": 0.0, "type": "boss"}
-		]
-	]
+	var layout: Dictionary = MapContentDatabaseScript.active_layout()
+	var floor_layouts: Array = layout.get("floors", [])
 
 	var nodes: Array = []
 	for floor_index in range(floor_layouts.size()):
@@ -86,17 +59,9 @@ static func _connections_for_node(node: Dictionary, next_nodes: Array) -> Array:
 	return result
 
 static func _title_for_type(node_type: String) -> String:
-	match node_type:
-		"elite":
-			return "精英"
-		"boss":
-			return "首领"
-		"event":
-			return "事件"
-		"treasure":
-			return "宝箱"
-		"shop":
-			return "坊市"
-		"rest":
-			return "休息"
-	return "战斗"
+	return LocalizationServiceScript.text(
+		MapContentDatabaseScript.node_title_key(node_type),
+		LocalizationDatabaseScript.DEFAULT_LANGUAGE_ID,
+		{},
+		MapContentDatabaseScript.node_title(node_type)
+	)

@@ -3,7 +3,7 @@ class_name MapModalChoiceFactory
 
 const CardDatabaseScript = preload("res://scripts/data/CardDatabase.gd")
 const UIStyleFactoryScript = preload("res://scripts/ui/UIStyleFactory.gd")
-const CardButtonScene = preload("res://scenes/CardButton.tscn")
+const CardButtonScene = preload("res://scenes/ui/CardButton.tscn")
 
 static func create_card_grid(parent: Control, columns := 3) -> GridContainer:
 	var grid := GridContainer.new()

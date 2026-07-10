@@ -21,7 +21,11 @@ var start_button: Button
 var settings_button: Button
 var quit_button: Button
 var settings_panel: PanelContainer
-var language_section_label: Label
+var game_tab_button: Button
+var keys_tab_button: Button
+var game_page_scroll: ScrollContainer
+var keys_page_scroll: ScrollContainer
+var general_section_label: Label
 var audio_section_label: Label
 var display_section_label: Label
 var controls_section_label: Label
@@ -42,8 +46,17 @@ var input_category_labels: Dictionary = {}
 var input_action_labels: Dictionary = {}
 var input_binding_buttons: Dictionary = {}
 var input_reset_buttons: Dictionary = {}
+var settings_confirm_button: Button
+var settings_cancel_button: Button
+var settings_default_button: Button
 var current_settings: Dictionary = {}
+var settings_open_snapshot: Dictionary = {}
+var active_settings_tab := "game"
 var rebinding_action_id := ""
+var suppress_setting_signals := false
+
+const SETTINGS_TAB_GAME := "game"
+const SETTINGS_TAB_KEYS := "keys"
 
 func _ready() -> void:
 	current_settings = SettingsStoreScript.load_settings()
@@ -80,7 +93,7 @@ func _build_scene() -> void:
 	root.add_child(subtitle_label)
 
 	var spacer_top := Control.new()
-	spacer_top.custom_minimum_size = Vector2(1.0, 48.0)
+	spacer_top.custom_minimum_size = Vector2(1.0, 66.0)
 	root.add_child(spacer_top)
 
 	var button_column := VBoxContainer.new()
@@ -110,68 +123,116 @@ func _build_scene() -> void:
 func _build_settings_panel(root: VBoxContainer) -> void:
 	settings_panel = PanelContainer.new()
 	settings_panel.visible = false
-	settings_panel.custom_minimum_size = Vector2(680.0, 520.0)
+	settings_panel.custom_minimum_size = Vector2(700.0, 500.0)
 	settings_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	settings_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.06, 0.07, 0.075, 0.98), Color(0.42, 0.46, 0.52, 1.0), 8, 1))
 	root.add_child(settings_panel)
 
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(640.0, 480.0)
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	settings_panel.add_child(scroll)
+	var panel_layout := VBoxContainer.new()
+	panel_layout.add_theme_constant_override("separation", 10)
+	panel_layout.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	settings_panel.add_child(panel_layout)
 
-	var settings_layout := VBoxContainer.new()
-	settings_layout.add_theme_constant_override("separation", 8)
-	settings_layout.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(settings_layout)
+	var tab_row := HBoxContainer.new()
+	tab_row.add_theme_constant_override("separation", 8)
+	panel_layout.add_child(tab_row)
 
-	language_section_label = _add_section_label(settings_layout, "")
+	game_tab_button = _make_tab_button("")
+	game_tab_button.pressed.connect(_set_settings_tab.bind(SETTINGS_TAB_GAME))
+	tab_row.add_child(game_tab_button)
+
+	keys_tab_button = _make_tab_button("")
+	keys_tab_button.pressed.connect(_set_settings_tab.bind(SETTINGS_TAB_KEYS))
+	tab_row.add_child(keys_tab_button)
+
+	game_page_scroll = _make_settings_scroll()
+	panel_layout.add_child(game_page_scroll)
+
+	keys_page_scroll = _make_settings_scroll()
+	keys_page_scroll.visible = false
+	panel_layout.add_child(keys_page_scroll)
+
+	var game_settings_layout := VBoxContainer.new()
+	game_settings_layout.add_theme_constant_override("separation", 8)
+	game_settings_layout.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	game_page_scroll.add_child(game_settings_layout)
+
+	var key_settings_layout := VBoxContainer.new()
+	key_settings_layout.add_theme_constant_override("separation", 8)
+	key_settings_layout.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	keys_page_scroll.add_child(key_settings_layout)
+
+	general_section_label = _add_section_label(game_settings_layout, "")
 	language_option = OptionButton.new()
 	_populate_language_options()
 	language_setting_label = _make_setting_label("")
-	_add_setting_row(settings_layout, language_setting_label, language_option)
+	_add_setting_row(game_settings_layout, language_setting_label, language_option)
 	language_option.item_selected.connect(_on_language_selected)
 
-	audio_section_label = _add_section_label(settings_layout, "")
+	audio_section_label = _add_section_label(game_settings_layout, "")
 	master_volume_label = _make_setting_label("")
 	master_volume_slider = _make_volume_slider(_current_audio_volume("master_volume", GameSettingsScript.DEFAULT_MASTER_VOLUME))
-	_add_setting_row(settings_layout, master_volume_label, master_volume_slider)
+	_add_setting_row(game_settings_layout, master_volume_label, master_volume_slider)
 	master_volume_slider.value_changed.connect(_on_master_volume_changed)
+	master_volume_slider.drag_ended.connect(_on_volume_drag_ended.bind("master_volume"))
 
 	music_volume_label = _make_setting_label("")
 	music_volume_slider = _make_volume_slider(_current_audio_volume("music_volume", GameSettingsScript.DEFAULT_MUSIC_VOLUME))
-	_add_setting_row(settings_layout, music_volume_label, music_volume_slider)
+	_add_setting_row(game_settings_layout, music_volume_label, music_volume_slider)
 	music_volume_slider.value_changed.connect(_on_music_volume_changed)
+	music_volume_slider.drag_ended.connect(_on_volume_drag_ended.bind("music_volume"))
 
 	sfx_volume_label = _make_setting_label("")
 	sfx_volume_slider = _make_volume_slider(_current_audio_volume("sfx_volume", GameSettingsScript.DEFAULT_SFX_VOLUME))
-	_add_setting_row(settings_layout, sfx_volume_label, sfx_volume_slider)
+	_add_setting_row(game_settings_layout, sfx_volume_label, sfx_volume_slider)
 	sfx_volume_slider.value_changed.connect(_on_sfx_volume_changed)
+	sfx_volume_slider.drag_ended.connect(_on_volume_drag_ended.bind("sfx_volume"))
 
-	display_section_label = _add_section_label(settings_layout, "")
+	display_section_label = _add_section_label(game_settings_layout, "")
 	resolution_option = OptionButton.new()
 	_populate_resolution_options()
 	resolution_setting_label = _make_setting_label("")
-	_add_setting_row(settings_layout, resolution_setting_label, resolution_option)
+	_add_setting_row(game_settings_layout, resolution_setting_label, resolution_option)
 	resolution_option.item_selected.connect(_on_resolution_selected)
 
 	window_mode_option = OptionButton.new()
 	_populate_window_mode_options()
 	window_mode_setting_label = _make_setting_label("")
-	_add_setting_row(settings_layout, window_mode_setting_label, window_mode_option)
+	_add_setting_row(game_settings_layout, window_mode_setting_label, window_mode_option)
 	window_mode_option.item_selected.connect(_on_window_mode_selected)
 
 	vsync_checkbox = CheckBox.new()
 	vsync_checkbox.button_pressed = bool(GameSettingsScript.display_settings(current_settings).get("vsync_enabled", true))
 	vsync_checkbox.toggled.connect(_on_vsync_toggled)
-	settings_layout.add_child(vsync_checkbox)
+	game_settings_layout.add_child(vsync_checkbox)
 
-	_build_input_settings(settings_layout)
+	_build_input_settings(key_settings_layout)
+
+	var action_row := HBoxContainer.new()
+	action_row.alignment = BoxContainer.ALIGNMENT_END
+	action_row.add_theme_constant_override("separation", 10)
+	panel_layout.add_child(action_row)
+
+	settings_default_button = _make_small_button("")
+	settings_default_button.custom_minimum_size = Vector2(92.0, 36.0)
+	settings_default_button.pressed.connect(_on_settings_default_pressed)
+	action_row.add_child(settings_default_button)
+
+	settings_cancel_button = _make_small_button("")
+	settings_cancel_button.custom_minimum_size = Vector2(92.0, 36.0)
+	settings_cancel_button.pressed.connect(_on_settings_cancel_pressed)
+	action_row.add_child(settings_cancel_button)
+
+	settings_confirm_button = _make_small_button("")
+	settings_confirm_button.custom_minimum_size = Vector2(92.0, 36.0)
+	settings_confirm_button.pressed.connect(_on_settings_confirm_pressed)
+	action_row.add_child(settings_confirm_button)
+
+	_set_settings_tab(SETTINGS_TAB_GAME)
 	_update_volume_labels()
 
 func _build_input_settings(settings_layout: VBoxContainer) -> void:
-	controls_section_label = _add_section_label(settings_layout, "")
+	controls_section_label = null
 	input_category_labels.clear()
 	input_action_labels.clear()
 	input_binding_buttons.clear()
@@ -214,6 +275,16 @@ func _make_menu_button(label: String) -> Button:
 	_style_button(button, Color(0.09, 0.10, 0.11, 0.96), Color(0.50, 0.55, 0.62, 1.0))
 	return button
 
+func _make_tab_button(label: String) -> Button:
+	var button := Button.new()
+	button.text = label
+	button.toggle_mode = true
+	button.focus_mode = Control.FOCUS_NONE
+	button.custom_minimum_size = Vector2(110.0, 36.0)
+	button.add_theme_font_size_override("font_size", 16)
+	_style_button(button, Color(0.085, 0.095, 0.105, 0.96), Color(0.42, 0.47, 0.54, 1.0))
+	return button
+
 func _make_small_button(label: String) -> Button:
 	var button := Button.new()
 	button.text = label
@@ -221,6 +292,13 @@ func _make_small_button(label: String) -> Button:
 	button.add_theme_font_size_override("font_size", 14)
 	_style_button(button, Color(0.085, 0.095, 0.105, 0.96), Color(0.42, 0.47, 0.54, 1.0))
 	return button
+
+func _make_settings_scroll() -> ScrollContainer:
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(660.0, 390.0)
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	return scroll
 
 func _make_setting_label(label_text: String) -> Label:
 	var label := Label.new()
@@ -307,60 +385,135 @@ func _on_start_pressed() -> void:
 	start_requested.emit()
 
 func _on_settings_pressed() -> void:
+	if settings_panel.visible:
+		_on_settings_cancel_pressed()
+		return
 	_play_audio("ui_click")
-	settings_panel.visible = not settings_panel.visible
+	_open_settings_panel()
+
+func _open_settings_panel() -> void:
+	settings_open_snapshot = current_settings.duplicate(true)
+	rebinding_action_id = ""
+	_refresh_setting_controls_from_current()
+	_set_settings_tab(SETTINGS_TAB_GAME)
+	settings_panel.visible = true
+
+func _set_settings_tab(tab_id: String) -> void:
+	active_settings_tab = tab_id
+	var game_selected := active_settings_tab == SETTINGS_TAB_GAME
+	if game_page_scroll != null:
+		game_page_scroll.visible = game_selected
+	if keys_page_scroll != null:
+		keys_page_scroll.visible = not game_selected
+	if game_tab_button != null:
+		game_tab_button.button_pressed = game_selected
+	if keys_tab_button != null:
+		keys_tab_button.button_pressed = not game_selected
 
 func _on_quit_pressed() -> void:
 	_play_audio("ui_click")
 	quit_requested.emit()
 
 func _on_master_volume_changed(value: float) -> void:
+	if suppress_setting_signals:
+		return
 	_set_audio_volume("master_volume", value)
 
 func _on_music_volume_changed(value: float) -> void:
+	if suppress_setting_signals:
+		return
 	_set_audio_volume("music_volume", value)
 
 func _on_sfx_volume_changed(value: float) -> void:
+	if suppress_setting_signals:
+		return
 	_set_audio_volume("sfx_volume", value)
+
+func _on_volume_drag_ended(value_changed: bool, _volume_key: String) -> void:
+	if suppress_setting_signals or not value_changed:
+		return
+	_play_audio("ui_confirm")
 
 func _on_rebind_action_pressed(action_id: String) -> void:
 	rebinding_action_id = action_id
 	_refresh_binding_labels()
 
 func _on_reset_action_binding_pressed(action_id: String) -> void:
+	if suppress_setting_signals:
+		return
 	current_settings = SettingsStoreScript.reset_action_binding(current_settings, action_id)
-	_save_settings_and_emit()
+	_apply_preview_settings()
 	_refresh_binding_labels()
 
 func _on_language_selected(index: int) -> void:
+	if suppress_setting_signals:
+		return
 	var language_id := str(language_option.get_item_metadata(index))
 	current_settings = SettingsStoreScript.set_language_id(current_settings, language_id)
-	_save_settings_and_emit()
+	_apply_preview_settings()
 	_refresh_localized_text()
 
 func _on_resolution_selected(index: int) -> void:
+	if suppress_setting_signals:
+		return
 	var resolution_id := str(resolution_option.get_item_metadata(index))
 	var display: Dictionary = GameSettingsScript.display_settings(current_settings)
 	current_settings = SettingsStoreScript.set_display_mode(current_settings, resolution_id, str(display.get("window_mode", GameSettingsScript.DEFAULT_WINDOW_MODE)))
-	_save_settings_and_emit()
+	_apply_preview_settings()
 
 func _on_window_mode_selected(index: int) -> void:
+	if suppress_setting_signals:
+		return
 	var window_mode := str(window_mode_option.get_item_metadata(index))
 	var display: Dictionary = GameSettingsScript.display_settings(current_settings)
 	current_settings = SettingsStoreScript.set_display_mode(current_settings, str(display.get("resolution_id", GameSettingsScript.DEFAULT_RESOLUTION_ID)), window_mode)
-	_save_settings_and_emit()
+	_apply_preview_settings()
 
 func _on_vsync_toggled(enabled: bool) -> void:
+	if suppress_setting_signals:
+		return
 	var display: Dictionary = GameSettingsScript.display_settings(current_settings)
 	display["vsync_enabled"] = enabled
 	current_settings["display"] = display
-	_save_settings_and_emit()
+	_apply_preview_settings()
 
 func _set_audio_volume(volume_key: String, value: float) -> void:
 	current_settings = SettingsStoreScript.set_audio_volume(current_settings, volume_key, value)
-	_save_settings_and_emit()
+	_apply_preview_settings()
 	_apply_audio_settings(current_settings)
 	_update_volume_labels()
+
+func _on_settings_confirm_pressed() -> void:
+	_play_audio("ui_confirm")
+	current_settings = GameSettingsScript.sanitize(current_settings)
+	SettingsStoreScript.save_settings(current_settings)
+	settings_open_snapshot = current_settings.duplicate(true)
+	_apply_preview_settings()
+	settings_panel.visible = false
+
+func _on_settings_cancel_pressed() -> void:
+	_play_audio("ui_click")
+	if not settings_open_snapshot.is_empty():
+		current_settings = GameSettingsScript.sanitize(settings_open_snapshot.duplicate(true))
+	rebinding_action_id = ""
+	_apply_preview_settings()
+	_refresh_setting_controls_from_current()
+	settings_panel.visible = false
+
+func _on_settings_default_pressed() -> void:
+	_play_audio("ui_click")
+	var defaults: Dictionary = SettingsStoreScript.default_settings()
+	var next_settings: Dictionary = current_settings.duplicate(true)
+	if active_settings_tab == SETTINGS_TAB_KEYS:
+		next_settings["input"] = (defaults.get("input", {}) as Dictionary).duplicate(true)
+	else:
+		next_settings["localization"] = (defaults.get("localization", {}) as Dictionary).duplicate(true)
+		next_settings["audio"] = (defaults.get("audio", {}) as Dictionary).duplicate(true)
+		next_settings["display"] = (defaults.get("display", {}) as Dictionary).duplicate(true)
+	current_settings = GameSettingsScript.sanitize(next_settings)
+	rebinding_action_id = ""
+	_apply_preview_settings()
+	_refresh_setting_controls_from_current()
 
 func _input(event: InputEvent) -> void:
 	if rebinding_action_id == "":
@@ -374,14 +527,41 @@ func _input(event: InputEvent) -> void:
 			return
 		current_settings = SettingsStoreScript.set_action_binding(current_settings, rebinding_action_id, event_spec)
 		rebinding_action_id = ""
-		_save_settings_and_emit()
+		_apply_preview_settings()
 		_refresh_binding_labels()
 		get_viewport().set_input_as_handled()
 
-func _save_settings_and_emit() -> void:
+func _apply_preview_settings() -> void:
 	current_settings = GameSettingsScript.sanitize(current_settings)
-	SettingsStoreScript.save_settings(current_settings)
+	_apply_audio_settings(current_settings)
 	settings_changed.emit(current_settings.duplicate(true))
+
+func _refresh_setting_controls_from_current() -> void:
+	suppress_setting_signals = true
+	var display: Dictionary = GameSettingsScript.display_settings(current_settings)
+	var audio: Dictionary = GameSettingsScript.audio_settings(current_settings)
+	var localization: Dictionary = GameSettingsScript.localization_settings(current_settings)
+	_select_option_by_metadata(language_option, str(localization.get("language_id", GameSettingsScript.DEFAULT_LANGUAGE_ID)))
+	_select_option_by_metadata(resolution_option, str(display.get("resolution_id", GameSettingsScript.DEFAULT_RESOLUTION_ID)))
+	_select_option_by_metadata(window_mode_option, str(display.get("window_mode", GameSettingsScript.DEFAULT_WINDOW_MODE)))
+	if vsync_checkbox != null:
+		vsync_checkbox.button_pressed = bool(display.get("vsync_enabled", true))
+	if master_volume_slider != null:
+		master_volume_slider.value = float(audio.get("master_volume", GameSettingsScript.DEFAULT_MASTER_VOLUME))
+	if music_volume_slider != null:
+		music_volume_slider.value = float(audio.get("music_volume", GameSettingsScript.DEFAULT_MUSIC_VOLUME))
+	if sfx_volume_slider != null:
+		sfx_volume_slider.value = float(audio.get("sfx_volume", GameSettingsScript.DEFAULT_SFX_VOLUME))
+	suppress_setting_signals = false
+	_refresh_localized_text()
+
+func _select_option_by_metadata(option: OptionButton, metadata: String) -> void:
+	if option == null:
+		return
+	for i in range(option.get_item_count()):
+		if str(option.get_item_metadata(i)) == metadata:
+			option.select(i)
+			return
 
 func _current_audio_volume(volume_key: String, fallback: float) -> float:
 	var audio: Dictionary = GameSettingsScript.audio_settings(current_settings)
@@ -432,8 +612,12 @@ func _refresh_localized_text() -> void:
 		settings_button.text = _text("menu.settings")
 	if quit_button != null:
 		quit_button.text = _text("menu.quit")
-	if language_section_label != null:
-		language_section_label.text = _text("settings.language")
+	if game_tab_button != null:
+		game_tab_button.text = _text("settings.tab_game")
+	if keys_tab_button != null:
+		keys_tab_button.text = _text("settings.tab_keys")
+	if general_section_label != null:
+		general_section_label.text = _text("settings.general")
 	if audio_section_label != null:
 		audio_section_label.text = _text("settings.audio")
 	if display_section_label != null:
@@ -463,6 +647,12 @@ func _refresh_localized_text() -> void:
 		window_mode_setting_label.text = _text("settings.window_mode")
 	if vsync_checkbox != null:
 		vsync_checkbox.text = _text("settings.vsync")
+	if settings_default_button != null:
+		settings_default_button.text = _text("settings.default")
+	if settings_cancel_button != null:
+		settings_cancel_button.text = _text("settings.cancel")
+	if settings_confirm_button != null:
+		settings_confirm_button.text = _text("settings.confirm")
 	_refresh_window_mode_labels()
 	_update_volume_labels()
 	_refresh_binding_labels()

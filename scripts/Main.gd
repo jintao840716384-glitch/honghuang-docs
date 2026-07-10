@@ -1,17 +1,18 @@
 extends Control
 
-const MainMenuScene = preload("res://scenes/MainMenuScene.tscn")
-const JobSelectScene = preload("res://scenes/JobSelectScene.tscn")
-const CharacterPrepScene = preload("res://scenes/CharacterPrepScene.tscn")
-const MapScene = preload("res://scenes/MapScene.tscn")
-const BattleScene = preload("res://scenes/BattleScene.tscn")
-const RunSettlementScene = preload("res://scenes/RunSettlementScene.tscn")
+const MainMenuScene = preload("res://scenes/main/MainMenuScene.tscn")
+const JobSelectScene = preload("res://scenes/main/JobSelectScene.tscn")
+const CharacterPrepScene = preload("res://scenes/main/CharacterPrepScene.tscn")
+const MapScene = preload("res://scenes/map/MapScene.tscn")
+const BattleScene = preload("res://scenes/battle/BattleScene.tscn")
+const RunSettlementScene = preload("res://scenes/main/RunSettlementScene.tscn")
 const RunStateScript = preload("res://scripts/run/RunState.gd")
 const InputSettingsScript = preload("res://scripts/settings/InputSettings.gd")
 const DisplayModeManagerScript = preload("res://scripts/settings/DisplayModeManager.gd")
 const MusicManagerScript = preload("res://scripts/audio/MusicManager.gd")
 const SettingsStoreScript = preload("res://scripts/settings/SettingsStore.gd")
 const GameSettingsScript = preload("res://scripts/settings/GameSettings.gd")
+const DataValidatorScript = preload("res://scripts/data/DataValidator.gd")
 
 var current_scene: Node
 var music_manager: Node
@@ -19,6 +20,11 @@ var run_state
 var active_node_id := ""
 
 func _ready() -> void:
+	var validation: Dictionary = DataValidatorScript.assert_valid_for_startup()
+	if not bool(validation.get("valid", false)):
+		push_error("Active data validation failed: %s" % "; ".join(validation.get("errors", [])))
+		get_tree().quit(1)
+		return
 	var settings: Dictionary = SettingsStoreScript.load_settings()
 	InputSettingsScript.apply_bindings(InputSettingsScript.settings_bindings(settings))
 	DisplayModeManagerScript.apply_display_settings(settings)
@@ -80,9 +86,9 @@ func show_run_settlement(settlement: Dictionary) -> void:
 func _on_job_selected(job_id: String) -> void:
 	show_character_prep(job_id)
 
-func _on_prep_start_requested(job_id: String, deck_ids: Array = [], reserve_ids: Array = []) -> void:
+func _on_prep_start_requested(job_id: String, _deck_ids: Array = [], _reserve_ids: Array = []) -> void:
 	run_state = RunStateScript.new()
-	run_state.start(job_id, deck_ids, reserve_ids)
+	run_state.start(job_id)
 	show_map()
 
 func _on_map_node_selected(node_data: Dictionary) -> void:

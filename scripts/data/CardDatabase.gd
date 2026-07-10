@@ -14,11 +14,15 @@ const CARD_PACK_SLOT_COUNT := CardPoolDatabaseScript.CARD_PACK_SLOT_COUNT
 static func get_cards() -> Dictionary:
 	return CardDefinitionDatabaseScript.get_cards()
 
+static func normalize_card_id(card_id: String) -> String:
+	return CardDefinitionDatabaseScript.normalize_card_id(card_id)
+
 static func make_card(card_id: String) -> Dictionary:
 	var card: Dictionary = get_card(card_id)
 	if card.is_empty():
 		return {}
-	card["uid"] = "%s_%d_%d" % [card_id, Time.get_ticks_usec(), randi()]
+	var canonical_id := str(card.get("id", normalize_card_id(card_id)))
+	card["uid"] = "%s_%d_%d" % [canonical_id, Time.get_ticks_usec(), randi()]
 	return card
 
 static func get_card(card_id: String) -> Dictionary:
@@ -53,37 +57,6 @@ static func pack_display_name(pack_id: String) -> String:
 
 static func card_score(card_id: String) -> int:
 	return CardDefinitionDatabaseScript.card_score(card_id)
-
-static func deck_score(deck_ids: Array) -> int:
-	var total := 0
-	for card_id_variant in deck_ids:
-		total += card_score(str(card_id_variant))
-	return total
-
-static func card_count(deck_ids: Array, card_id: String) -> int:
-	var total := 0
-	for existing_id_variant in deck_ids:
-		if str(existing_id_variant) == card_id:
-			total += 1
-	return total
-
-static func can_add_card_to_deck(card_id: String, deck_ids: Array, score_limit := 0) -> bool:
-	if card_id == "" or get_card(card_id).is_empty():
-		return false
-	if deck_ids.size() >= MAX_DECK_SIZE:
-		return false
-	if score_limit > 0 and deck_score(deck_ids) + card_score(card_id) > score_limit:
-		return false
-	return true
-
-static func deck_add_block_reason(card_id: String, deck_ids: Array, score_limit := 0) -> String:
-	if card_id == "" or get_card(card_id).is_empty():
-		return "未知卡牌"
-	if deck_ids.size() >= MAX_DECK_SIZE:
-		return "卡组已达到 %d 张上限" % MAX_DECK_SIZE
-	if score_limit > 0 and deck_score(deck_ids) + card_score(card_id) > score_limit:
-		return "分数超过上限 %d" % score_limit
-	return ""
 
 static func shop_price(card_id: String) -> int:
 	return CardPoolDatabaseScript.shop_price(card_id)
@@ -124,8 +97,7 @@ static func shop_stock(job_id: String, realm_index: int, rng, count := 6, unlock
 static func _with_unlock_metadata(card: Dictionary) -> Dictionary:
 	var card_id := str(card.get("id", ""))
 	var unlock_packs: Array = CardPoolDatabaseScript.card_unlock_packs(card_id)
-	if unlock_packs.is_empty():
-		unlock_packs = [CardPoolDatabaseScript.card_unlock_pack(card_id)]
+	var has_unlock_source := not unlock_packs.is_empty()
 	if not card.has("unlock_tier"):
 		card["unlock_tier"] = CardPoolDatabaseScript.card_unlock_tier(card_id)
 	if not card.has("unlock_pack"):
@@ -133,5 +105,5 @@ static func _with_unlock_metadata(card: Dictionary) -> Dictionary:
 	if not card.has("unlock_packs"):
 		card["unlock_packs"] = unlock_packs.duplicate()
 	if not card.has("default_unlocked"):
-		card["default_unlocked"] = int(card.get("unlock_tier", 0)) <= 0
+		card["default_unlocked"] = has_unlock_source and int(card.get("unlock_tier", 0)) <= 0
 	return card

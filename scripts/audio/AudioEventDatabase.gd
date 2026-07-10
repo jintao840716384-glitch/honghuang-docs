@@ -1,6 +1,8 @@
 extends RefCounted
 class_name AudioEventDatabase
 
+const CONTENT_STATE_ACTIVE := "active"
+
 const CATEGORY_UI_SFX := "ui_sfx"
 const CATEGORY_BATTLE_SFX := "battle_sfx"
 const CATEGORY_MUSIC := "music"
@@ -17,9 +19,6 @@ static func event_definitions() -> Dictionary:
 		"card_break": _event("card_break", CATEGORY_BATTLE_SFX, -11.0, 50, "res://assets/audio/sfx/card_break.ogg", "card_break"),
 		"attack": _event("attack", CATEGORY_BATTLE_SFX, -14.0, 60, "res://assets/audio/sfx/attack.ogg", "attack"),
 		"hit": _event("hit", CATEGORY_BATTLE_SFX, -10.0, 35, "res://assets/audio/sfx/hit.ogg", "hit"),
-		"defense_activate": _event("defense_activate", CATEGORY_BATTLE_SFX, -12.0, 30, "res://assets/audio/sfx/defense_activate.ogg", "defense_activate"),
-		"chain_start": _event("chain_start", CATEGORY_BATTLE_SFX, -16.0, 80, "res://assets/audio/sfx/chain_start.ogg", "chain_start"),
-		"chain_resolve": _event("chain_resolve", CATEGORY_BATTLE_SFX, -15.0, 35, "res://assets/audio/sfx/chain_resolve.ogg", "chain_resolve"),
 		"heal": _event("heal", CATEGORY_BATTLE_SFX, -13.0, 40, "res://assets/audio/sfx/heal.ogg", "heal"),
 		"victory": _event("victory", CATEGORY_BATTLE_SFX, -13.0, 100, "res://assets/audio/sfx/victory.ogg", "victory"),
 		"ui_click": _event("ui_click", CATEGORY_UI_SFX, -22.0, 20, "res://assets/audio/ui/ui_click.ogg", "ui_click"),
@@ -73,6 +72,7 @@ static func one_shot_event_ids() -> Array:
 static func _event(event_id: String, category_id: String, volume: float, cooldown: int, path: String, placeholder_id: String) -> Dictionary:
 	return {
 		"id": event_id,
+		"content_state": CONTENT_STATE_ACTIVE,
 		"category": category_id,
 		"volume": volume,
 		"cooldown_ms": cooldown,

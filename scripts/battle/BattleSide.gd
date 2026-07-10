@@ -55,6 +55,11 @@ func draw_cards(amount: int) -> Array:
 		return []
 	return deck_manager.draw(max(0, amount))
 
+func process_pending_reshuffle() -> bool:
+	if deck_manager == null:
+		return false
+	return deck_manager.process_pending_reshuffle()
+
 func take_deck_messages() -> Array:
 	if deck_manager == null:
 		return []

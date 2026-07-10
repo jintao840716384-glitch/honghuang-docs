@@ -1,11 +1,15 @@
 extends RefCounted
 class_name CharacterDatabase
 
+const CONTENT_STATE_ACTIVE := "active"
+
 
 static func character_templates() -> Dictionary:
 	return {
 		"sword": {
 			"id": "sword",
+			"content_state": CONTENT_STATE_ACTIVE,
+			"name_key": "character.sword.name",
 			"name": "剑修",
 			"max_hp": 35,
 			"attack": 8,
@@ -16,6 +20,8 @@ static func character_templates() -> Dictionary:
 		},
 		"talisman": {
 			"id": "talisman",
+			"content_state": CONTENT_STATE_ACTIVE,
+			"name_key": "character.talisman.name",
 			"name": "符修",
 			"max_hp": 30,
 			"attack": 4,
@@ -43,8 +49,20 @@ static func character_templates() -> Dictionary:
 static func character_template(character_id: String) -> Dictionary:
 	var templates: Dictionary = character_templates()
 	if templates.has(character_id):
-		return (templates.get(character_id, {}) as Dictionary).duplicate(true)
+		var definition: Dictionary = templates.get(character_id, {})
+		if str(definition.get("content_state", "")) == CONTENT_STATE_ACTIVE:
+			return definition.duplicate(true)
 	return {}
+
+
+static func active_character_ids() -> Array:
+	var result: Array = []
+	for character_id_variant in character_templates().keys():
+		var character_id := str(character_id_variant)
+		var definition: Dictionary = character_templates().get(character_id, {})
+		if str(definition.get("content_state", "")) == CONTENT_STATE_ACTIVE:
+			result.append(character_id)
+	return result
 
 
 static func action_sequence_for_character(character_id: String) -> Array:
@@ -58,6 +76,8 @@ static func action_sequence_for_character(character_id: String) -> Array:
 static func _character(character_id: String, display_name: String, max_hp: int, attack: int, defense: int, tags: Array, animation_profile: String) -> Dictionary:
 	return {
 		"id": character_id,
+		"content_state": CONTENT_STATE_ACTIVE,
+		"name_key": "character.%s.name" % character_id,
 		"name": display_name,
 		"max_hp": max_hp,
 		"attack": attack,

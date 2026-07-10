@@ -34,24 +34,4 @@ static func entries_for_combat_event(event: Dictionary) -> Array:
 				"text": "防御 +%d" % int(event.get("value", 0)),
 				"color": Color(0.58, 0.78, 1.0, 1.0)
 			}]
-		"event_interrupted":
-			return [{
-				"target": str(event.get("target", "enemy")),
-				"text": "打断",
-				"color": Color(1.0, 0.85, 0.25, 1.0)
-			}]
-		"defense_card_activated":
-			var card: Dictionary = event.get("card", {})
-			return [{
-				"target": "player",
-				"text": "发动 %s" % card.get("name", ""),
-				"color": Color(0.62, 0.78, 1.0, 1.0)
-			}]
-		"chain_card_resolved":
-			var chain_card: Dictionary = event.get("card", {})
-			return [{
-				"target": "player",
-				"text": "结算 %s" % chain_card.get("name", ""),
-				"color": Color(0.85, 0.72, 1.0, 1.0)
-			}]
 	return []

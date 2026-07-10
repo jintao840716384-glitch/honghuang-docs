@@ -1,7 +1,7 @@
 extends PanelContainer
 class_name CombatActorView
 
-const FloatingTextScene = preload("res://scenes/FloatingText.tscn")
+const FloatingTextScene = preload("res://scenes/battle/FloatingText.tscn")
 const FLOATING_TEXT_STEP_GAP := 0.28
 
 @onready var name_label: Label = get_node("ActorLayout/NameLabel") as Label

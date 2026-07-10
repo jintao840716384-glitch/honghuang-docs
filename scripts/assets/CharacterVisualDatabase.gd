@@ -1,6 +1,8 @@
 extends RefCounted
 class_name CharacterVisualDatabase
 
+const CONTENT_STATE_ACTIVE := "active"
+
 const VisualAssetDatabaseScript = preload("res://scripts/assets/VisualAssetDatabase.gd")
 
 const DEFAULT_PROFILE_ID := "default"
@@ -74,6 +76,7 @@ static func _enemy_profile(profile_id: String, sprite_asset_id: String, color: C
 static func _profile(profile_id: String, portrait_asset_id: String, battle_sprite_asset_id: String, battle_animation_asset_id: String, icon_asset_id: String, placeholder_color: Color) -> Dictionary:
 	return {
 		"id": profile_id,
+		"content_state": CONTENT_STATE_ACTIVE,
 		"portrait_asset_id": portrait_asset_id,
 		"battle_sprite_asset_id": battle_sprite_asset_id,
 		"battle_animation_asset_id": battle_animation_asset_id,

@@ -89,12 +89,6 @@ func _placeholder_stream_for_event(event_name: String) -> AudioStream:
 			return _whoosh(0.130, 520.0, 110.0, 0.42, 1006)
 		"hit":
 			return _impact(0.150, 0.70, 1007)
-		"defense_activate":
-			return _chime(0.180, [520.0, 780.0, 1180.0], 0.42)
-		"chain_start":
-			return _chime(0.210, [330.0, 660.0, 990.0], 0.34)
-		"chain_resolve":
-			return _chime(0.150, [720.0, 1080.0], 0.32)
 		"heal":
 			return _chime(0.240, [520.0, 760.0, 1040.0], 0.38)
 		"victory":

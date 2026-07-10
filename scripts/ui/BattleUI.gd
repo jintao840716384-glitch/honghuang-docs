@@ -4,10 +4,11 @@ signal map_battle_completed(deck_ids: Array, reserve_ids: Array, player_hp: int,
 signal run_abandoned
 
 const BattleManagerScript = preload("res://scripts/battle/BattleManager.gd")
+const BattleViewModelScript = preload("res://scripts/battle/BattleViewModel.gd")
 const CardDatabaseScript = preload("res://scripts/data/CardDatabase.gd")
-const CardButtonScene = preload("res://scenes/CardButton.tscn")
-const ZoneSlotScene = preload("res://scenes/ZoneSlot.tscn")
-const CombatActorViewScene = preload("res://scenes/CombatActorView.tscn")
+const CardButtonScene = preload("res://scenes/ui/CardButton.tscn")
+const ZoneSlotScene = preload("res://scenes/battle/ZoneSlot.tscn")
+const CombatActorViewScene = preload("res://scenes/battle/CombatActorView.tscn")
 const BattleDebugToolsScript = preload("res://scripts/ui/BattleDebugTools.gd")
 const AudioManagerScript = preload("res://scripts/audio/AudioManager.gd")
 const CardInteractionRulesScript = preload("res://scripts/ui/CardInteractionRules.gd")
@@ -16,6 +17,7 @@ const CardDisplayRulesScript = preload("res://scripts/ui/CardDisplayRules.gd")
 const UIStyleFactoryScript = preload("res://scripts/ui/UIStyleFactory.gd")
 const BattleFloatingTextRulesScript = preload("res://scripts/ui/BattleFloatingTextRules.gd")
 const CharacterVisualDatabaseScript = preload("res://scripts/assets/CharacterVisualDatabase.gd")
+const LocalizationServiceScript = preload("res://scripts/localization/LocalizationService.gd")
 
 const ACTOR_BASE_SIZE := Vector2(238, 286)
 const ACTOR_SIDE_SCALE := 0.72
@@ -32,24 +34,17 @@ const UNIT_EQUIPMENT_GAP := 6.0
 const CARD_DRAG_START_THRESHOLD := 10.0
 const VISUAL_STEP_GAP := 0.04
 const DRAW_AFTER_TURN_BANNER_GAP := 0.14
+const DEBUG_TOOLS_ENABLED := false
 
-var manager: BattleManager
+var manager
 var highlighted_slot_uid := ""
 var highlighted_equipment_uid := ""
 var log_expanded := false
 var log_tween: Tween
 var audio_manager: Node
 var victory_audio_battle := -1
-var available_response_uids: Dictionary = {}
 var equipment_replace_uids: Dictionary = {}
-var selected_response_uid := ""
-var selected_response_card: Dictionary = {}
-var selected_response_fx_global_position := Vector2.ZERO
-var selected_response_fx_size := Vector2.ZERO
-var hovered_response_uid := ""
-var hovered_response_card: Dictionary = {}
 var selected_equipment_uid := ""
-var confirm_mode := ""
 var fx_layer: Control
 var turn_banner_layer: Control
 var turn_banner_panel: Panel
@@ -121,14 +116,10 @@ var suppress_hand_press_uid := ""
 @onready var reward_scene: Control = get_node("RewardScene") as Control
 @onready var reward_title_label: Label = get_node("RewardScene/RewardLayout/RewardTitleLabel") as Label
 @onready var reward_container: GridContainer = get_node("RewardScene/RewardLayout/RewardContainer") as GridContainer
-@onready var chain_overlay: Control = get_node("ChainOverlay") as Control
-@onready var chain_title_label: Label = get_node("ChainOverlay/ChainTitleLabel") as Label
-@onready var chain_event_label: Label = get_node("ChainOverlay/ChainEventLabel") as Label
-@onready var chain_skip_button: Button = get_node("ChainOverlay/SkipResponseButton") as Button
-@onready var response_confirm_panel: PanelContainer = get_node("ResponseConfirmPanel") as PanelContainer
-@onready var response_confirm_name_label: Label = get_node("ResponseConfirmPanel/ConfirmLayout/ConfirmNameLabel") as Label
-@onready var response_confirm_activate_button: Button = get_node("ResponseConfirmPanel/ConfirmLayout/ConfirmButtonRow/ConfirmActivateButton") as Button
-@onready var response_confirm_cancel_button: Button = get_node("ResponseConfirmPanel/ConfirmLayout/ConfirmButtonRow/ConfirmCancelButton") as Button
+@onready var equipment_confirm_panel: PanelContainer = get_node("EquipmentConfirmPanel") as PanelContainer
+@onready var equipment_confirm_name_label: Label = get_node("EquipmentConfirmPanel/ConfirmLayout/ConfirmNameLabel") as Label
+@onready var equipment_confirm_activate_button: Button = get_node("EquipmentConfirmPanel/ConfirmLayout/ConfirmButtonRow/ConfirmActivateButton") as Button
+@onready var equipment_confirm_cancel_button: Button = get_node("EquipmentConfirmPanel/ConfirmLayout/ConfirmButtonRow/ConfirmCancelButton") as Button
 @onready var pile_viewer = get_node("PileViewer")
 @onready var card_tooltip = get_node("CardTooltip")
 
@@ -141,7 +132,8 @@ func _ready() -> void:
 	_create_attack_indicator_layer()
 	_create_result_preview_label()
 	_create_enemy_spell_zone()
-	_create_debug_tools()
+	if _battle_debug_tools_enabled():
+		_create_debug_tools()
 	normal_attack_button.pressed.connect(_on_normal_attack)
 	end_turn_button.pressed.connect(_on_end_turn)
 	restart_button.pressed.connect(_on_restart)
@@ -150,9 +142,8 @@ func _ready() -> void:
 	exile_pile_button.pressed.connect(_on_exile_pile_pressed)
 	log_toggle_button.pressed.connect(_on_log_toggle)
 	log_close_button.pressed.connect(_on_log_close)
-	chain_skip_button.pressed.connect(_on_response_skipped)
-	response_confirm_activate_button.pressed.connect(_on_confirm_activate)
-	response_confirm_cancel_button.pressed.connect(_on_confirm_cancel)
+	equipment_confirm_activate_button.pressed.connect(_on_equipment_confirm_activate)
+	equipment_confirm_cancel_button.pressed.connect(_on_equipment_confirm_cancel)
 	equipment_replace_cancel_button.pressed.connect(_on_equipment_replace_cancel)
 	if pile_viewer.has_signal("viewer_closed"):
 		pile_viewer.viewer_closed.connect(_on_pile_viewer_closed)
@@ -199,7 +190,7 @@ func _input(event: InputEvent) -> void:
 func setup(job_id: String) -> void:
 	map_spirit_reward = 0
 	pending_map_completion.clear()
-	manager = BattleManagerScript.new()
+	manager = BattleViewModelScript.new(BattleManagerScript.new())
 	manager.combat_event.connect(_on_combat_event)
 	manager.start_run(job_id)
 	render()
@@ -207,7 +198,7 @@ func setup(job_id: String) -> void:
 func setup_run_battle(job_id: String, deck_ids: Array, battle_number: int, encounter_type: String, run_context := {}, spirit_reward := 0) -> void:
 	map_spirit_reward = max(0, int(spirit_reward))
 	pending_map_completion.clear()
-	manager = BattleManagerScript.new()
+	manager = BattleViewModelScript.new(BattleManagerScript.new())
 	manager.combat_event.connect(_on_combat_event)
 	manager.start_run_with_deck(job_id, deck_ids, battle_number, encounter_type, false, run_context)
 	render()
@@ -222,7 +213,6 @@ func render() -> void:
 	_refresh_actions()
 	_refresh_pending_choice()
 	_refresh_reward()
-	_refresh_response()
 	_refresh_result_preview()
 	_refresh_equipment_replace()
 	_refresh_hand()
@@ -232,7 +222,7 @@ func render() -> void:
 	_refresh_log()
 
 func _refresh_actors() -> void:
-	battle_number_label.text = "第 %d 场" % manager.battle_number
+	battle_number_label.text = _text("battle.number", {"number": manager.battle_number}, "第 {number} 场")
 	var active_uids: Dictionary = {}
 	_refresh_formation_side(manager.formation.player_units, true, active_uids)
 	_refresh_formation_side(manager.formation.enemy_units, false, active_uids)
@@ -278,7 +268,7 @@ func _setup_unit_actor_view(actor: CombatActorView, unit, is_player_side: bool) 
 	actor.apply_visual_profile(CharacterVisualDatabaseScript.profile_for_unit_data(_unit_visual_data(unit)))
 	var extra := ""
 	if unit == manager.player and manager.player.job_id == "sword":
-		extra = "剑势：%d" % manager.player.sword_momentum
+		extra = "剑势 %d" % manager.player.sword_momentum
 	elif unit != manager.player:
 		extra = _unit_equipment_text(unit)
 	var intent := ""
@@ -297,7 +287,7 @@ func _setup_unit_actor_view(actor: CombatActorView, unit, is_player_side: bool) 
 		extra,
 		intent
 	)
-	var selected_for_enemy_target := (not is_player_side) and manager.phase == "target_select" and unit_uid == manager.selected_enemy_uid
+	var selected_for_enemy_target: bool = (not is_player_side) and manager.phase == "target_select" and unit_uid == manager.selected_enemy_uid
 	var selected_for_unit_action := false
 	actor.set_selected(selected_for_enemy_target or selected_for_unit_action)
 	actor.set_combat_highlight(_combat_highlight_mode_for_key(_unit_combat_key(unit)))
@@ -353,7 +343,7 @@ func _on_actor_mouse_entered(actor: CombatActorView) -> void:
 	if str(actor.get_meta("unit_team", "")) != "enemy":
 		return
 	var uid := str(actor.get_meta("unit_uid", ""))
-	if manager.select_enemy_target(uid):
+	if _battle_result_succeeded(manager.select_enemy_target(uid)):
 		render()
 
 func _on_actor_gui_input(event: InputEvent, actor: CombatActorView) -> void:
@@ -363,13 +353,14 @@ func _on_actor_gui_input(event: InputEvent, actor: CombatActorView) -> void:
 	var unit_team := str(actor.get_meta("unit_team", ""))
 	var uid := str(actor.get_meta("unit_uid", ""))
 	if manager.phase == "target_select" and unit_team == "enemy":
-		manager.confirm_target_selection(uid)
-		audio_manager.play_event("ui_confirm")
+		var result: Dictionary = manager.confirm_target_selection(uid)
+		if _consume_battle_result(result):
+			audio_manager.play_event("ui_confirm")
 		render()
-	elif unit_team == "enemy" and manager.select_enemy_target(uid):
+	elif unit_team == "enemy" and _battle_result_succeeded(manager.select_enemy_target(uid)):
 		audio_manager.play_event("ui_click")
 		render()
-	elif unit_team == "player" and manager.select_player_target(uid):
+	elif unit_team == "player" and _battle_result_succeeded(manager.select_player_target(uid)):
 		audio_manager.play_event("ui_click")
 		render()
 
@@ -426,18 +417,19 @@ func _combat_highlight_mode_for_key(key: String) -> String:
 	return ""
 
 func _refresh_card_area_info() -> void:
-	deck_pile_button.text = "卡组\n%d" % manager.deck.deck.size()
-	graveyard_pile_button.text = "墓地\n%d" % manager.deck.graveyard.size()
-	exile_pile_button.text = "除外\n%d" % manager.deck.exile.size()
+	deck_pile_button.text = _text("battle.pile.deck", {"count": manager.deck.deck.size()}, "卡组\n{count}")
+	graveyard_pile_button.text = _text("battle.pile.graveyard", {"count": manager.deck.graveyard.size()}, "墓地\n{count}")
+	exile_pile_button.text = _text("battle.pile.exile", {"count": manager.deck.exile.size()}, "除外\n{count}")
 
 func _refresh_actions() -> void:
-	var choosing := not manager.pending_choice.is_empty() or not manager.pending_equipment_replace.is_empty()
-	var responding := manager.phase == "response"
-	var player_phase := manager.phase == "player"
-	action_row.visible = player_phase
+	var choosing: bool = not manager.pending_choice.is_empty() or not manager.pending_equipment_replace.is_empty()
+	var responding: bool = manager.phase == "response"
+	var player_phase: bool = manager.phase == "player"
+	action_row.visible = player_phase or responding
 	normal_attack_button.visible = false
-	end_turn_button.visible = player_phase
-	end_turn_button.disabled = not player_phase or choosing or responding or _interaction_locked()
+	end_turn_button.visible = player_phase or responding
+	end_turn_button.text = _text("battle.action.skip_response", {}, "跳过响应") if responding else _text("battle.action.end_turn", {}, "结束回合")
+	end_turn_button.disabled = (not player_phase and not responding) or choosing or _interaction_locked()
 	_style_end_turn_button(_end_turn_should_glow(player_phase, choosing, responding))
 
 func _end_turn_should_glow(player_phase: bool, choosing: bool, responding: bool) -> bool:
@@ -458,7 +450,7 @@ func _refresh_unit_action_panels() -> void:
 	if manager == null:
 		_remove_inactive_unit_action_panels(active_uids)
 		return
-	var can_show := manager.phase == "player" and manager.pending_choice.is_empty() and manager.pending_equipment_replace.is_empty() and not _interaction_locked()
+	var can_show: bool = manager.phase == "player" and manager.pending_choice.is_empty() and manager.pending_equipment_replace.is_empty() and not _interaction_locked()
 	if can_show:
 		for unit in manager.formation.living_units("player"):
 			if unit == null:
@@ -495,7 +487,7 @@ func _inline_action_panel_for_unit(uid: String) -> PanelContainer:
 	panel.add_child(row)
 	var attack_button := Button.new()
 	attack_button.name = "AttackButton"
-	attack_button.text = "攻击"
+	attack_button.text = _text("battle.action.attack", {}, "攻击")
 	attack_button.focus_mode = Control.FOCUS_NONE
 	attack_button.custom_minimum_size = Vector2(66.0, 30.0)
 	attack_button.pressed.connect(_on_inline_unit_attack_pressed.bind(uid))
@@ -503,7 +495,7 @@ func _inline_action_panel_for_unit(uid: String) -> PanelContainer:
 	row.add_child(attack_button)
 	var defend_button := Button.new()
 	defend_button.name = "DefendButton"
-	defend_button.text = "防御"
+	defend_button.text = _text("battle.action.defend", {}, "防御")
 	defend_button.focus_mode = Control.FOCUS_NONE
 	defend_button.custom_minimum_size = Vector2(66.0, 30.0)
 	defend_button.pressed.connect(_on_inline_unit_defend_pressed.bind(uid))
@@ -534,16 +526,16 @@ func _refresh_restart_button() -> void:
 	if manager == null:
 		return
 	if not manager.auto_advance_after_reward and manager.phase == "defeat":
-		restart_button.text = "返回菜单"
+		restart_button.text = _text("battle.action.return_menu", {}, "返回菜单")
 	else:
-		restart_button.text = "重开"
+		restart_button.text = _text("battle.action.restart", {}, "重开")
 
 func _refresh_pending_choice() -> void:
 	_clear_children(choice_container)
 	choice_panel.visible = not manager.pending_choice.is_empty()
 	if not choice_panel.visible:
 		return
-	choice_title_label.text = str(manager.pending_choice.get("prompt", "请选择"))
+	choice_title_label.text = str(manager.pending_choice.get("prompt", _text("common.choose", {}, "请选择")))
 	for card in manager.get_pending_options():
 		var button: CardButton = CardButtonScene.instantiate()
 		button.setup(card, "选择")
@@ -561,7 +553,7 @@ func _refresh_reward() -> void:
 		audio_manager.play_event("victory")
 		victory_audio_battle = manager.battle_number
 	reward_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	reward_title_label.text = "战斗胜利\n选择一张奖励卡"
+	reward_title_label.text = _text("battle.reward.title", {}, "战斗胜利\n选择一张奖励卡")
 	reward_container.columns = 3
 	for card_id in manager.reward_options:
 		var card := CardDatabaseScript.get_card(card_id)
@@ -577,7 +569,7 @@ func _refresh_reward() -> void:
 		button.card_pressed.connect(_on_reward_pressed.bind(card_id))
 		slot.add_child(button)
 		var choose_button := Button.new()
-		choose_button.text = "选择此卡"
+		choose_button.text = _text("common.choose_card", {}, "选择此卡")
 		choose_button.focus_mode = Control.FOCUS_NONE
 		choose_button.custom_minimum_size = Vector2(0.0, 36.0)
 		choose_button.pressed.connect(func() -> void:
@@ -586,28 +578,11 @@ func _refresh_reward() -> void:
 		_style_button(choose_button, Color(0.14, 0.11, 0.07, 0.96), Color(0.88, 0.68, 0.34, 1.0))
 		slot.add_child(choose_button)
 
-func _refresh_response() -> void:
-	available_response_uids.clear()
-	chain_overlay.visible = manager.phase == "response"
-	if not chain_overlay.visible:
-		_clear_response_selection()
-		return
-	var responses: Array = manager.get_available_responses_for_current_event()
-	for card in responses:
-		available_response_uids[str(card.get("uid", ""))] = true
-	if selected_response_uid != "" and not available_response_uids.has(selected_response_uid):
-		_clear_response_selection()
-	chain_title_label.text = "发动盖伏卡"
-	_update_response_preview_text()
-	chain_skip_button.text = "结束发动"
-
 func _refresh_result_preview() -> void:
 	if manager == null:
 		_hide_result_preview()
 		return
 	match manager.phase:
-		"response":
-			_update_response_preview_text()
 		"target_select":
 			_update_target_preview_text()
 		_:
@@ -615,15 +590,15 @@ func _refresh_result_preview() -> void:
 
 func _refresh_equipment_replace() -> void:
 	equipment_replace_uids.clear()
-	var active := not manager.pending_equipment_replace.is_empty()
+	var active: bool = not manager.pending_equipment_replace.is_empty()
 	equipment_replace_hint_panel.visible = active
 	if not active:
 		_clear_equipment_replace_selection()
 		return
 	var source_card: Dictionary = manager.pending_equipment_replace.get("source_card", {})
-	equipment_replace_hint_label.text = "替换：选择要卸下的装备"
+	equipment_replace_hint_label.text = _text("battle.equipment.choose_replace", {}, "替换：选择要卸下的装备")
 	if not source_card.is_empty():
-		equipment_replace_hint_label.text = "替换：%s" % source_card.get("name", "装备")
+		equipment_replace_hint_label.text = _text("battle.equipment.replace", {"name": source_card.get("name", _text("battle.equipment.name", {}, "装备"))}, "替换：{name}")
 	var target_uid := str(manager.pending_equipment_replace.get("target_uid", manager.player.uid))
 	var target_unit = manager.formation.unit_by_uid(target_uid)
 	if target_unit == null:
@@ -655,6 +630,11 @@ func _apply_hand_card_draw_visibility(button: CardButton, uid: String) -> void:
 
 func _refresh_spell_zone() -> void:
 	_clear_children(spell_zone_container)
+	var available_response_uids: Dictionary = {}
+	if manager.phase == "response":
+		for response_variant in manager.available_responses():
+			var response_card: Dictionary = response_variant
+			available_response_uids[str(response_card.get("uid", ""))] = true
 	for i in range(5):
 		var slot: ZoneSlot = ZoneSlotScene.instantiate()
 		if i < manager.player.spell_zone.size():
@@ -669,13 +649,23 @@ func _refresh_spell_zone() -> void:
 		slot.slot_pressed.connect(_on_spell_zone_slot_pressed)
 		spell_zone_container.add_child(slot)
 		var slot_uid := str(slot.get_meta("card_uid", ""))
-		if slot.has_method("set_response_available"):
-			slot.call("set_response_available", available_response_uids.has(slot_uid), slot_uid == selected_response_uid)
+		slot.set_response_available(available_response_uids.has(slot_uid))
 		if i < manager.player.spell_zone.size():
 			var zone_card: Dictionary = manager.player.spell_zone[i]
 			if str(zone_card.get("uid", "")) == highlighted_slot_uid:
 				slot.call_deferred("flash")
 	highlighted_slot_uid = ""
+
+
+func _on_spell_zone_slot_pressed(card: Dictionary, _anchor_position: Vector2) -> void:
+	if manager == null or manager.phase != "response":
+		return
+	var uid := str(card.get("uid", ""))
+	if uid == "":
+		return
+	if _consume_battle_result(manager.play_response_card(uid)):
+		audio_manager.play_event("ui_confirm")
+	render()
 
 func _refresh_enemy_spell_zone() -> void:
 	if enemy_spell_zone_container == null:
@@ -850,14 +840,6 @@ func _wire_card_tooltip(button: CardButton) -> void:
 	button.card_hovered.connect(_show_card_tooltip)
 	button.card_unhovered.connect(_hide_card_tooltip)
 
-func _chain_status_text() -> String:
-	if manager.chain_stack.is_empty():
-		return "尚未发动"
-	var names: Array = []
-	for card in manager.chain_stack:
-		names.append(str(card.get("name", "卡牌")))
-	return "已发动：%s" % " <- ".join(names)
-
 func _layout_hand_cards() -> void:
 	var cards := hand_container.get_children()
 	var count: int = cards.size()
@@ -907,54 +889,16 @@ func _layout_equipment_cards() -> void:
 
 func _show_card_tooltip(card: Dictionary, anchor_position: Vector2) -> void:
 	card_tooltip.show_card(card, anchor_position)
-	var uid := str(card.get("uid", ""))
-	if manager != null and manager.phase == "response" and available_response_uids.has(uid):
-		hovered_response_uid = uid
-		hovered_response_card = card.duplicate(true)
-		_update_response_preview_text()
 
 func _hide_card_tooltip() -> void:
 	card_tooltip.hide_tooltip()
-	if hovered_response_uid != "":
-		hovered_response_uid = ""
-		hovered_response_card.clear()
-		_update_response_preview_text()
-
-func _clear_response_selection() -> void:
-	selected_response_uid = ""
-	selected_response_card.clear()
-	selected_response_fx_global_position = Vector2.ZERO
-	selected_response_fx_size = Vector2.ZERO
-	hovered_response_uid = ""
-	hovered_response_card.clear()
-	_hide_result_preview()
-	if confirm_mode == "response":
-		_hide_confirm_panel()
 
 func _clear_equipment_replace_selection() -> void:
 	selected_equipment_uid = ""
-	if confirm_mode == "equipment_replace":
-		_hide_confirm_panel()
+	_hide_equipment_confirm_panel()
 
-func _hide_confirm_panel() -> void:
-	confirm_mode = ""
-	response_confirm_panel.visible = false
-
-func _update_response_preview_text() -> void:
-	if chain_event_label == null:
-		return
-	chain_event_label.text = "可发动放置区中发光的盖伏卡"
-	var lines: Array = []
-	if manager != null and not manager.current_event.is_empty():
-		lines.append(_response_event_result_text(manager.current_event, "预计结果"))
-		var preview_card: Dictionary = selected_response_card if not selected_response_card.is_empty() else hovered_response_card
-		if not preview_card.is_empty():
-			var preview_event := manager.current_event.duplicate(true)
-			_preview_timing_effect(preview_card.get("effect", {}), preview_event)
-			lines.append(_response_event_result_text(preview_event, "发动%s后" % preview_card.get("name", "盖伏卡")))
-		else:
-			lines.append("悬停或选择盖伏卡查看发动后的结果。")
-	_set_result_preview_text(lines)
+func _hide_equipment_confirm_panel() -> void:
+	equipment_confirm_panel.visible = false
 
 func _update_target_preview_text() -> void:
 	var lines: Array = _target_selection_preview_lines()
@@ -1002,96 +946,6 @@ func _hide_result_preview() -> void:
 	result_preview_label.visible = false
 	result_preview_label.text = ""
 
-func _response_event_result_text(event: Dictionary, prefix: String) -> String:
-	var event_type := str(event.get("event_type", ""))
-	var target_name := _event_target_display_name(event)
-	if bool(event.get("cancelled", false)):
-		return "%s：原事件被打断，不再结算。" % prefix
-	match event_type:
-		"player_damage_before", "player_lethal_damage_before":
-			return "%s：%s受到 %d 点伤害。" % [prefix, target_name, max(0, int(event.get("value", 0)))]
-		"enemy_attack_declared":
-			return "%s：%s准备攻击，基础威力 %d。" % [prefix, _event_source_display_name(event), int(event.get("value", 0))]
-		"enemy_spell_declared":
-			return "%s：%s准备施法，基础威力 %d。" % [prefix, _event_source_display_name(event), int(event.get("value", 0))]
-		"enemy_destroy_zone_card_declared":
-			var target: Dictionary = event.get("target", {})
-			var target_key := _response_target_key(target)
-			if target_key != "" and target_key in event.get("protected_targets", []):
-				return "%s：%s被保护，本次不会被破坏。" % [prefix, target.get("name", "目标")]
-			return "%s：%s将被破坏。" % [prefix, target.get("name", "目标")]
-	return "%s：%s。" % [prefix, manager.get_event_description(event) if manager != null else "事件继续结算"]
-
-func _event_target_display_name(event: Dictionary) -> String:
-	var target = event.get("target", null)
-	if target is Object and target.get("name") != null:
-		return str(target.name)
-	if str(target) == "player":
-		return "玩家"
-	if str(target) == "enemy":
-		return "敌人"
-	if target is Dictionary:
-		return str(target.get("name", "目标"))
-	return "目标"
-
-func _event_source_display_name(event: Dictionary) -> String:
-	var source = event.get("source", null)
-	if source is Object and source.get("name") != null:
-		return str(source.name)
-	if str(source) == "player":
-		return "玩家"
-	if str(source) == "enemy":
-		return "敌人"
-	return "敌方"
-
-func _preview_timing_effect(effect: Dictionary, event: Dictionary) -> void:
-	match str(effect.get("kind", "")):
-		"modify_damage":
-			var before: int = int(event.get("value", 0))
-			event["value"] = max(0, before + int(effect.get("value", 0)))
-		"interrupt_event":
-			event["cancelled"] = true
-		"cancel_or_reduce_event":
-			var source = event.get("source", null)
-			var is_boss := false
-			if source is Object and source.get("unit_rank") != null:
-				is_boss = str(source.get("unit_rank")) == "boss"
-			if is_boss and effect.has("boss_reduce"):
-				event["value"] = max(0, int(event.get("value", 0)) - int(effect.get("boss_reduce", 0)))
-			else:
-				event["cancelled"] = true
-		"protect_destroy_target":
-			var protected_targets: Array = event.get("protected_targets", []).duplicate()
-			var target_key := _response_target_key(event.get("target", {}))
-			if target_key != "":
-				protected_targets.append(target_key)
-			event["protected_targets"] = protected_targets
-		"set_player_hp_to_one_if_lethal":
-			var target = event.get("target", null)
-			var current_hp := manager.player.hp if manager != null else 1
-			if target is Object and target.get("hp") != null:
-				current_hp = int(target.hp)
-			var damage := int(event.get("value", 0))
-			if damage >= current_hp:
-				event["value"] = max(0, current_hp - 1)
-		"multi":
-			for sub_effect in effect.get("effects", []):
-				var sub_effect_dict: Dictionary = sub_effect
-				_preview_timing_effect(sub_effect_dict, event)
-
-func _response_target_key(target) -> String:
-	if target is Dictionary:
-		return str(target.get("uid", target.get("id", target.get("name", ""))))
-	if target is Object and target.get("uid") != null:
-		return str(target.uid)
-	return str(target)
-
-func _update_spell_zone_response_state() -> void:
-	for child in spell_zone_container.get_children():
-		var slot_uid := str(child.get_meta("card_uid", ""))
-		if child.has_method("set_response_available"):
-			child.call("set_response_available", available_response_uids.has(slot_uid), slot_uid == selected_response_uid)
-
 func _update_equipment_zone_replace_state() -> void:
 	for child in equipment_zone_container.get_children():
 		var slot_uid := str(child.get_meta("card_uid", ""))
@@ -1107,40 +961,6 @@ func _update_equipment_zone_replace_state() -> void:
 				child.call("set_response_available", equipment_replace_uids.has(slot_uid), slot_uid == selected_equipment_uid)
 	_layout_equipment_cards()
 
-func _on_spell_zone_slot_pressed(card: Dictionary, anchor_position: Vector2) -> void:
-	if manager.phase != "response":
-		return
-	var uid := str(card.get("uid", ""))
-	if not available_response_uids.has(uid):
-		return
-	selected_response_uid = uid
-	selected_response_card = card.duplicate(true)
-	_update_response_preview_text()
-	var source_slot := _find_spell_zone_slot(uid)
-	if source_slot != null:
-		selected_response_fx_global_position = source_slot.global_position + source_slot.size * 0.5
-		selected_response_fx_size = source_slot.size
-		anchor_position = source_slot.global_position + Vector2(source_slot.size.x * 0.5, source_slot.size.y + 4.0)
-	else:
-		selected_response_fx_global_position = anchor_position
-		selected_response_fx_size = Vector2.ZERO
-	_update_spell_zone_response_state()
-	_show_response_confirm(card, anchor_position)
-
-func _show_response_confirm(card: Dictionary, anchor_position: Vector2) -> void:
-	response_confirm_name_label.text = "发动 %s？" % card.get("name", "卡牌")
-	confirm_mode = "response"
-	response_confirm_activate_button.text = "发动"
-	response_confirm_cancel_button.text = "取消"
-	response_confirm_panel.visible = true
-	response_confirm_panel.size = response_confirm_panel.custom_minimum_size
-	var panel_size := response_confirm_panel.size
-	var viewport_size := get_viewport_rect().size
-	var target := anchor_position + Vector2(-panel_size.x * 0.5, 10.0)
-	target.x = clamp(target.x, 12.0, max(12.0, viewport_size.x - panel_size.x - 12.0))
-	target.y = clamp(target.y, 12.0, max(12.0, viewport_size.y - panel_size.y - 12.0))
-	response_confirm_panel.global_position = target
-
 func _on_equipment_slot_pressed(card: Dictionary, anchor_position: Vector2) -> void:
 	if manager.pending_equipment_replace.is_empty():
 		return
@@ -1152,18 +972,17 @@ func _on_equipment_slot_pressed(card: Dictionary, anchor_position: Vector2) -> v
 	_show_equipment_replace_confirm(card, anchor_position)
 
 func _show_equipment_replace_confirm(card: Dictionary, anchor_position: Vector2) -> void:
-	confirm_mode = "equipment_replace"
-	response_confirm_name_label.text = "替换 %s？" % card.get("name", "装备")
-	response_confirm_activate_button.text = "替换"
-	response_confirm_cancel_button.text = "取消"
-	response_confirm_panel.visible = true
-	response_confirm_panel.size = response_confirm_panel.custom_minimum_size
-	var panel_size := response_confirm_panel.size
+	equipment_confirm_name_label.text = _text("battle.equipment.confirm", {"name": card.get("name", _text("battle.equipment.name", {}, "装备"))}, "替换 {name}？")
+	equipment_confirm_activate_button.text = _text("battle.equipment.replace_action", {}, "替换")
+	equipment_confirm_cancel_button.text = _text("common.cancel", {}, "取消")
+	equipment_confirm_panel.visible = true
+	equipment_confirm_panel.size = equipment_confirm_panel.custom_minimum_size
+	var panel_size := equipment_confirm_panel.size
 	var viewport_size := get_viewport_rect().size
 	var target := anchor_position + Vector2(12.0, -panel_size.y * 0.5)
 	target.x = clamp(target.x, 12.0, max(12.0, viewport_size.x - panel_size.x - 12.0))
 	target.y = clamp(target.y, 12.0, max(12.0, viewport_size.y - panel_size.y - 12.0))
-	response_confirm_panel.global_position = target
+	equipment_confirm_panel.global_position = target
 
 func _on_hand_card_gui_input(event: InputEvent, button: CardButton) -> void:
 	if manager == null or button == null:
@@ -1257,16 +1076,19 @@ func _finish_hand_card_drag(pointer_global_position: Vector2) -> void:
 		call_deferred("_clear_suppressed_hand_press", uid)
 		return
 	audio_manager.play_event("ui_confirm")
+	var result: Dictionary = {}
 	match str(target.get("kind", "")):
 		"enemy_unit":
-			manager.play_hand_card_on_enemy_target(uid, str(target.get("unit_uid", "")))
+			result = manager.play_hand_card_on_enemy_target(uid, str(target.get("unit_uid", "")))
+		"ally_unit":
+			result = manager.play_hand_card_on_unit_target(uid, str(target.get("unit_uid", "")))
 		"spell_zone":
-			manager.play_hand_card(uid)
+			result = manager.play_hand_card(uid)
 		"unit_equipment":
-			manager.play_hand_card_on_unit_target(uid, str(target.get("unit_uid", "")))
-	var card_was_removed := not source_card.is_empty() and manager.deck.find_hand_card(uid).is_empty()
+			result = manager.play_hand_card_on_unit_target(uid, str(target.get("unit_uid", "")))
+	var card_was_consumed := _consume_battle_result(result) and _battle_result_consumed_card(result, uid)
 	render()
-	if card_was_removed:
+	if card_was_consumed:
 		_play_hand_card_release_fx(source_card, source_prefix, source_position, source_size, source_scale)
 	call_deferred("_clear_suppressed_hand_press", uid)
 
@@ -1307,6 +1129,11 @@ func _clear_suppressed_hand_press(uid: String) -> void:
 func _collect_hand_card_drop_targets(card: Dictionary, rule: String) -> Array:
 	var result: Array = []
 	match rule:
+		"ally_unit":
+			for unit in manager.formation.living_units("player"):
+				var actor := _actor_for_combat_key(_unit_combat_key(unit))
+				if actor != null and actor.visible:
+					result.append({"kind": "ally_unit", "unit_uid": str(unit.uid), "control": actor})
 		"enemy_unit":
 			for unit in manager.formation.living_units("enemy"):
 				var actor := _actor_for_combat_key(_unit_combat_key(unit))
@@ -1389,10 +1216,10 @@ func _on_hand_card_pressed(uid: String) -> void:
 	var source_size := source_button.size if source_button != null else HAND_CARD_SIZE
 	var source_scale := source_button.scale if source_button != null else Vector2.ONE
 	var source_prefix := _hand_prefix_for_card(source_card)
-	manager.play_hand_card(uid)
-	var card_was_removed := not source_card.is_empty() and manager.deck.find_hand_card(uid).is_empty()
+	var result: Dictionary = manager.play_hand_card(uid)
+	var card_was_consumed := _consume_battle_result(result) and _battle_result_consumed_card(result, uid)
 	render()
-	if card_was_removed and source_button != null:
+	if card_was_consumed and source_button != null:
 		_play_hand_card_release_fx(source_card, source_prefix, source_position, source_size, source_scale)
 
 func _on_hand_card_motion_started(_card: Dictionary) -> void:
@@ -1426,10 +1253,10 @@ func _show_reward_spirit_confirmation() -> void:
 	_clear_children(reward_container)
 	reward_scene.visible = true
 	reward_container.columns = 1
-	reward_title_label.text = "获得 %d 灵石" % map_spirit_reward
+	reward_title_label.text = _text("battle.reward.stones", {"value": map_spirit_reward}, "获得 {value} 灵石")
 	reward_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var continue_button := Button.new()
-	continue_button.text = "继续探索"
+	continue_button.text = _text("battle.action.continue", {}, "继续探索")
 	continue_button.focus_mode = Control.FOCUS_NONE
 	continue_button.custom_minimum_size = Vector2(220.0, 42.0)
 	continue_button.pressed.connect(_emit_pending_map_completion)
@@ -1446,71 +1273,47 @@ func _emit_pending_map_completion() -> void:
 	pending_map_completion.clear()
 	map_battle_completed.emit(deck_ids, reserve_ids, player_hp, player_max_hp)
 
-func _on_response_selected(uid: String) -> void:
-	var activated_card := selected_response_card.duplicate(true)
-	var fx_position := selected_response_fx_global_position
-	var fx_size := selected_response_fx_size
-	_clear_response_selection()
-	card_tooltip.hide_tooltip()
-	manager.add_card_to_chain(uid)
-	_play_response_card_fx(activated_card, fx_position, fx_size)
-	render()
-
-func _on_response_skipped() -> void:
-	_clear_response_selection()
-	card_tooltip.hide_tooltip()
-	manager.skip_response()
-	render()
-
-func _on_confirm_activate() -> void:
+func _on_equipment_confirm_activate() -> void:
 	audio_manager.play_event("ui_confirm")
-	match confirm_mode:
-		"response":
-			if selected_response_uid == "":
-				return
-			_on_response_selected(selected_response_uid)
-		"equipment_replace":
-			if selected_equipment_uid == "":
-				return
-			var source_uid := str(manager.pending_equipment_replace.get("source_uid", ""))
-			var source_card: Dictionary = manager.pending_equipment_replace.get("source_card", {})
-			var source_button := _find_hand_card_button(source_uid)
-			var source_position := source_button.global_position if source_button != null else Vector2.ZERO
-			var source_size := source_button.size if source_button != null else HAND_CARD_SIZE
-			var source_scale := source_button.scale if source_button != null else Vector2.ONE
-			var source_prefix := _hand_prefix_for_card(source_card)
-			_hide_confirm_panel()
-			card_tooltip.hide_tooltip()
-			manager.choose_equipment_replacement(selected_equipment_uid)
-			var source_was_removed := source_uid != "" and manager.deck.find_hand_card(source_uid).is_empty()
-			selected_equipment_uid = ""
-			render()
-			if source_was_removed and source_button != null:
-				_play_hand_card_release_fx(source_card, source_prefix, source_position, source_size, source_scale)
+	if selected_equipment_uid == "":
+		return
+	var source_uid := str(manager.pending_equipment_replace.get("source_uid", ""))
+	var source_card: Dictionary = manager.pending_equipment_replace.get("source_card", {})
+	var source_button := _find_hand_card_button(source_uid)
+	var source_position := source_button.global_position if source_button != null else Vector2.ZERO
+	var source_size := source_button.size if source_button != null else HAND_CARD_SIZE
+	var source_scale := source_button.scale if source_button != null else Vector2.ONE
+	var source_prefix := _hand_prefix_for_card(source_card)
+	_hide_equipment_confirm_panel()
+	card_tooltip.hide_tooltip()
+	var result: Dictionary = manager.choose_equipment_replacement(selected_equipment_uid)
+	var source_was_consumed := _consume_battle_result(result) and _battle_result_consumed_card(result, source_uid)
+	selected_equipment_uid = ""
+	render()
+	if source_was_consumed and source_button != null:
+		_play_hand_card_release_fx(source_card, source_prefix, source_position, source_size, source_scale)
 
-func _on_confirm_cancel() -> void:
+func _on_equipment_confirm_cancel() -> void:
 	audio_manager.play_event("ui_click")
-	match confirm_mode:
-		"response":
-			_clear_response_selection()
-			_update_spell_zone_response_state()
-		"equipment_replace":
-			_clear_equipment_replace_selection()
-			_update_equipment_zone_replace_state()
+	_clear_equipment_replace_selection()
+	_update_equipment_zone_replace_state()
 
 func _on_equipment_replace_cancel() -> void:
 	audio_manager.play_event("ui_click")
 	_clear_equipment_replace_selection()
 	card_tooltip.hide_tooltip()
-	manager.cancel_equipment_replacement()
+	_consume_battle_result(manager.cancel_equipment_replacement())
 	render()
 
 func _on_normal_attack() -> void:
-	manager.player_normal_attack()
+	_consume_battle_result(manager.player_normal_attack())
 	render()
 
 func _on_end_turn() -> void:
-	manager.end_player_turn()
+	if manager.phase == "response":
+		_consume_battle_result(manager.skip_response())
+	else:
+		_consume_battle_result(manager.end_player_turn())
 	render()
 
 func _on_restart() -> void:
@@ -1571,8 +1374,6 @@ func _on_combat_event(event: Dictionary) -> void:
 			pass
 		"unit_defended":
 			pass
-		"event_interrupted":
-			pass
 		"card_played":
 			pass
 		"defense_card_set":
@@ -1587,15 +1388,6 @@ func _on_combat_event(event: Dictionary) -> void:
 			_flash_equipment_slot(highlighted_equipment_uid)
 		"card_destroyed":
 			pass
-		"defense_card_activated":
-			var card: Dictionary = event.get("card", {})
-			highlighted_slot_uid = str(card.get("uid", ""))
-			_flash_spell_slot(highlighted_slot_uid)
-		"chain_started":
-			pass
-		"chain_card_resolved":
-			var chain_card: Dictionary = event.get("card", {})
-			_flash_spell_slot(str(chain_card.get("uid", "")))
 
 func _apply_combat_floating_text(event: Dictionary) -> void:
 	for entry in BattleFloatingTextRulesScript.entries_for_combat_event(event):
@@ -1985,9 +1777,11 @@ func _create_enemy_spell_zone() -> void:
 	add_child(enemy_spell_zone_container)
 
 func _create_debug_tools() -> void:
+	if not _battle_debug_tools_enabled():
+		return
 	debug_toggle_button = Button.new()
 	debug_toggle_button.name = "DebugToolsToggleButton"
-	debug_toggle_button.text = "测试"
+	debug_toggle_button.text = _text("battle.debug.open", {}, "测试")
 	debug_toggle_button.focus_mode = Control.FOCUS_NONE
 	debug_toggle_button.anchor_left = 0.0
 	debug_toggle_button.anchor_top = 0.0
@@ -2019,47 +1813,55 @@ func _create_debug_tools() -> void:
 	debug_tools.modify_target_defense_requested.connect(_on_debug_modify_target_defense)
 	_apply_debug_tools_state(false)
 
+func _battle_debug_tools_enabled() -> bool:
+	return DEBUG_TOOLS_ENABLED
+
 func _on_inline_unit_attack_pressed(unit_uid: String) -> void:
 	if manager == null:
 		return
 	audio_manager.play_event("ui_confirm")
-	manager.player_unit_attack(unit_uid)
+	_consume_battle_result(manager.player_unit_attack(unit_uid))
 	render()
 
 func _on_inline_unit_defend_pressed(unit_uid: String) -> void:
 	if manager == null:
 		return
 	audio_manager.play_event("ui_confirm")
-	manager.player_unit_defend(unit_uid)
+	_consume_battle_result(manager.player_unit_defend(unit_uid))
 	render()
 
 func _on_debug_toggle() -> void:
+	if not _battle_debug_tools_enabled():
+		_apply_debug_tools_state(false)
+		return
 	audio_manager.play_event("ui_click")
 	_apply_debug_tools_state(not debug_tools_expanded)
 
 func _apply_debug_tools_state(expanded: bool) -> void:
+	if not _battle_debug_tools_enabled():
+		expanded = false
 	debug_tools_expanded = expanded
 	if debug_tools != null:
 		debug_tools.visible = expanded
 	if debug_toggle_button != null:
-		debug_toggle_button.text = "收起" if expanded else "测试"
+		debug_toggle_button.text = _text("common.collapse", {}, "收起") if expanded else _text("battle.debug.open", {}, "测试")
 
 func _on_debug_add_enemy() -> void:
-	if manager == null:
+	if not _battle_debug_tools_enabled() or manager == null:
 		return
 	if manager.debug_add_enemy():
 		audio_manager.play_event("ui_confirm")
 	render()
 
 func _on_debug_add_ally() -> void:
-	if manager == null:
+	if not _battle_debug_tools_enabled() or manager == null:
 		return
 	if manager.debug_add_ally():
 		audio_manager.play_event("ui_confirm")
 	render()
 
 func _on_debug_clear_extra_enemies() -> void:
-	if manager == null:
+	if not _battle_debug_tools_enabled() or manager == null:
 		return
 	manager.clear_extra_enemy_units()
 	manager.clear_extra_player_units()
@@ -2067,7 +1869,7 @@ func _on_debug_clear_extra_enemies() -> void:
 	render()
 
 func _on_debug_damage_target(amount: int) -> void:
-	if manager == null:
+	if not _battle_debug_tools_enabled() or manager == null:
 		return
 	var target = manager.selected_debug_unit()
 	if target == null:
@@ -2077,7 +1879,7 @@ func _on_debug_damage_target(amount: int) -> void:
 	render()
 
 func _on_debug_heal_target(amount: int) -> void:
-	if manager == null:
+	if not _battle_debug_tools_enabled() or manager == null:
 		return
 	var target = manager.selected_debug_unit()
 	if target == null:
@@ -2086,7 +1888,7 @@ func _on_debug_heal_target(amount: int) -> void:
 	render()
 
 func _on_debug_modify_target_attack(amount: int) -> void:
-	if manager == null:
+	if not _battle_debug_tools_enabled() or manager == null:
 		return
 	var target = manager.selected_debug_unit()
 	if target == null:
@@ -2095,7 +1897,7 @@ func _on_debug_modify_target_attack(amount: int) -> void:
 	render()
 
 func _on_debug_modify_target_defense(amount: int) -> void:
-	if manager == null:
+	if not _battle_debug_tools_enabled() or manager == null:
 		return
 	var target = manager.selected_debug_unit()
 	if target == null:
@@ -2112,19 +1914,56 @@ func _find_hand_card_button(uid: String) -> CardButton:
 			return button
 	return null
 
-func _find_spell_zone_slot(uid: String) -> Control:
-	if uid == "":
-		return null
-	for child in spell_zone_container.get_children():
-		if str(child.get_meta("card_uid", "")) == uid:
-			return child as Control
-	return null
-
 func _card_from_hand_button_or_manager(button: CardButton, uid: String) -> Dictionary:
 	if button != null and not button.card_data.is_empty():
 		return button.card_data.duplicate(true)
-	var card := manager.deck.find_hand_card(uid)
+	var card: Dictionary = manager.deck.find_hand_card(uid)
 	return card.duplicate(true) if not card.is_empty() else {}
+
+
+func _battle_result_succeeded(result: Dictionary) -> bool:
+	return bool(result.get("accepted", false)) and bool(result.get("success", false))
+
+
+func _consume_battle_result(result: Dictionary) -> bool:
+	if _battle_result_succeeded(result):
+		return true
+	var error_code := str(result.get("error_code", result.get("error", "request_rejected")))
+	var error_key := str(result.get("error_key", "battle.error.%s" % error_code))
+	if result_preview_label != null:
+		result_preview_label.text = _text(error_key, {}, _battle_error_fallback(error_code))
+	return false
+
+
+func _battle_error_fallback(error_code: String) -> String:
+	match error_code:
+		"missing_request_id":
+			return "请求缺少编号。"
+		"missing_request_type":
+			return "请求缺少类型。"
+		"unknown_request_type":
+			return "请求类型无效。"
+		"invalid_request_side":
+			return "请求阵营无效。"
+	return "请求未被接受。"
+
+
+func _battle_result_consumed_card(result: Dictionary, card_uid: String) -> bool:
+	if card_uid == "":
+		return false
+	for event_variant in result.get("events", []):
+		var event: Dictionary = event_variant
+		if not ["card_played", "enemy_card_played", "defense_card_set", "defense_card_activated", "equipment_replaced"].has(str(event.get("type", ""))):
+			continue
+		for field in ["card", "new_card"]:
+			var card: Dictionary = event.get(field, {})
+			if str(card.get("uid", "")) == card_uid:
+				return true
+	return false
+
+
+func _text(text_id: String, params: Dictionary = {}, source_fallback := "") -> String:
+	return LocalizationServiceScript.text(text_id, "zh_cn", params, source_fallback)
 
 func _hand_prefix_for_card(card: Dictionary) -> String:
 	return CardInteractionRulesScript.played_card_fx_prefix_for_card(card)
@@ -2169,51 +2008,6 @@ func _play_hand_card_release_fx(card: Dictionary, prefix: String, start_global_p
 		outline.queue_free()
 	)
 
-func _play_response_card_fx(card: Dictionary, source_global_center: Vector2, source_size: Vector2) -> void:
-	if fx_layer == null or card.is_empty():
-		return
-	var ghost_size := Vector2(170.0, 238.0)
-	if source_size.x > 0.0 and source_size.y > 0.0:
-		var scale_factor: float = min(1.0, max(0.62, source_size.y / 84.0))
-		ghost_size *= scale_factor
-	if source_global_center == Vector2.ZERO:
-		source_global_center = get_viewport_rect().size * 0.5
-	var start_global_position := source_global_center - ghost_size * 0.5
-	var start_position: Vector2 = start_global_position - fx_layer.global_position
-	var ghost: CardButton = CardButtonScene.instantiate()
-	fx_layer.add_child(ghost)
-	ghost.setup(card, "发动")
-	ghost.hover_details_enabled = false
-	ghost.hover_motion_enabled = false
-	ghost.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ghost.focus_mode = Control.FOCUS_NONE
-	ghost.custom_minimum_size = ghost_size
-	ghost.size = ghost_size
-	ghost.position = start_position
-	ghost.pivot_offset = ghost_size * 0.5
-	ghost.z_index = 24
-	ghost.modulate = Color(1.0, 1.0, 1.0, 0.88)
-
-	var outline := _create_card_outline(card, ghost_size)
-	fx_layer.add_child(outline)
-	outline.position = start_position
-	outline.pivot_offset = ghost_size * 0.5
-	outline.z_index = 25
-	outline.modulate = Color(1.0, 0.94, 0.66, 0.78)
-
-	var tween := create_tween()
-	tween.set_parallel(true)
-	tween.tween_property(ghost, "position", start_position + Vector2(0.0, -42.0), 0.24).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.tween_property(ghost, "scale", Vector2(1.12, 1.12), 0.24).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.tween_property(ghost, "modulate:a", 0.0, 0.24).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-	tween.tween_property(outline, "position", start_position + Vector2(0.0, -58.0), 0.30).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.tween_property(outline, "scale", Vector2(1.22, 1.22), 0.30).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.tween_property(outline, "modulate:a", 0.0, 0.30).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-	tween.finished.connect(func() -> void:
-		ghost.queue_free()
-		outline.queue_free()
-	)
-
 func _create_card_outline(card: Dictionary, outline_size: Vector2) -> Panel:
 	var outline := Panel.new()
 	outline.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2238,7 +2032,7 @@ func _card_outline_style(card: Dictionary) -> StyleBoxFlat:
 
 func _apply_log_state(expanded: bool) -> void:
 	log_expanded = expanded
-	log_toggle_button.text = "收起" if log_expanded else "日志"
+	log_toggle_button.text = _text("common.collapse", {}, "收起") if log_expanded else _text("battle.log", {}, "日志")
 	if log_tween != null and log_tween.is_running():
 		log_tween.kill()
 	if log_expanded:
@@ -2266,25 +2060,18 @@ func _apply_log_state(expanded: bool) -> void:
 func _apply_scene_style() -> void:
 	log_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.045, 0.05, 0.058, 0.96), Color(0.34, 0.38, 0.46, 1.0), 8, 2))
 	choice_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.045, 0.05, 0.058, 0.96), Color(0.54, 0.62, 0.82, 1.0), 8, 2))
-	response_confirm_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.045, 0.05, 0.058, 0.98), Color(0.95, 0.88, 0.62, 1.0), 8, 2))
+	equipment_confirm_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.045, 0.05, 0.058, 0.98), Color(0.95, 0.88, 0.62, 1.0), 8, 2))
 	equipment_replace_hint_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.045, 0.07, 0.055, 0.96), Color(0.42, 0.84, 0.56, 1.0), 8, 2))
 	equipment_replace_hint_label.add_theme_font_size_override("font_size", 12)
 	equipment_replace_hint_label.add_theme_color_override("font_color", Color(0.82, 1.0, 0.86, 1.0))
-	chain_title_label.add_theme_font_size_override("font_size", 62)
-	chain_title_label.add_theme_color_override("font_color", Color(1.0, 0.94, 0.72, 1.0))
-	chain_title_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.78))
-	chain_title_label.add_theme_constant_override("shadow_offset_x", 2)
-	chain_title_label.add_theme_constant_override("shadow_offset_y", 3)
-	chain_event_label.add_theme_font_size_override("font_size", 16)
-	chain_event_label.add_theme_color_override("font_color", Color(0.88, 0.90, 0.95, 1.0))
 	if result_preview_label != null:
 		result_preview_label.add_theme_font_size_override("font_size", 18)
 		result_preview_label.add_theme_color_override("font_color", Color(1.0, 0.91, 0.66, 1.0))
 		result_preview_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.78))
 		result_preview_label.add_theme_constant_override("shadow_offset_x", 1)
 		result_preview_label.add_theme_constant_override("shadow_offset_y", 2)
-	response_confirm_name_label.add_theme_font_size_override("font_size", 13)
-	response_confirm_name_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.70, 1.0))
+	equipment_confirm_name_label.add_theme_font_size_override("font_size", 13)
+	equipment_confirm_name_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.70, 1.0))
 	if reward_scene is PanelContainer:
 		(reward_scene as PanelContainer).add_theme_stylebox_override("panel", _panel_style(Color(0.045, 0.05, 0.058, 0.96), Color(0.58, 0.50, 0.32, 1.0), 8, 2))
 	reward_title_label.add_theme_font_size_override("font_size", 22)
@@ -2292,9 +2079,8 @@ func _apply_scene_style() -> void:
 	_style_button(normal_attack_button, Color(0.26, 0.13, 0.08, 1.0), Color(0.95, 0.54, 0.32, 1.0))
 	_style_end_turn_button(false)
 	_style_button(restart_button, Color(0.10, 0.10, 0.11, 0.94), Color(0.42, 0.44, 0.48, 1.0))
-	_style_button(chain_skip_button, Color(0.10, 0.09, 0.07, 0.94), Color(0.88, 0.76, 0.44, 1.0))
-	_style_button(response_confirm_activate_button, Color(0.24, 0.14, 0.06, 0.96), Color(0.96, 0.70, 0.32, 1.0))
-	_style_button(response_confirm_cancel_button, Color(0.10, 0.10, 0.11, 0.96), Color(0.54, 0.56, 0.62, 1.0))
+	_style_button(equipment_confirm_activate_button, Color(0.24, 0.14, 0.06, 0.96), Color(0.96, 0.70, 0.32, 1.0))
+	_style_button(equipment_confirm_cancel_button, Color(0.10, 0.10, 0.11, 0.96), Color(0.54, 0.56, 0.62, 1.0))
 	_style_button(equipment_replace_cancel_button, Color(0.08, 0.10, 0.09, 0.94), Color(0.42, 0.84, 0.56, 1.0))
 	_style_button(deck_pile_button, Color(0.11, 0.10, 0.08, 0.92), Color(0.74, 0.58, 0.30, 1.0))
 	_style_button(graveyard_pile_button, Color(0.09, 0.09, 0.10, 0.92), Color(0.50, 0.54, 0.60, 1.0))

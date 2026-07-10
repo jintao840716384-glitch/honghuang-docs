@@ -4,13 +4,14 @@ signal start_requested(job_id: String, deck_ids: Array, reserve_ids: Array)
 signal back_requested
 
 const JobDatabaseScript = preload("res://scripts/data/JobDatabase.gd")
-const MetaProgressionScript = preload("res://scripts/data/MetaProgression.gd")
+const CharacterPrepViewModelScript = preload("res://scripts/ui/CharacterPrepViewModel.gd")
 const ProgressionDatabaseScript = preload("res://scripts/data/ProgressionDatabase.gd")
 const CardPoolDatabaseScript = preload("res://scripts/data/CardPoolDatabase.gd")
 const DeckBuildRulesScript = preload("res://scripts/run/DeckBuildRules.gd")
 const UIStyleFactoryScript = preload("res://scripts/ui/UIStyleFactory.gd")
 const DeckBuilderViewFactoryScript = preload("res://scripts/ui/DeckBuilderViewFactory.gd")
 const CharacterVisualDatabaseScript = preload("res://scripts/assets/CharacterVisualDatabase.gd")
+const LocalizationServiceScript = preload("res://scripts/localization/LocalizationService.gd")
 const CARD_UNLOCK_UPGRADE_ID := "card_unlock"
 const BASE_DECK_SCORE_LIMIT := 20
 const GROWTH_CATEGORY_ORDER := ["基础属性", "卡组与卡包", "角色特性", "强力规则"]
@@ -35,7 +36,7 @@ var prep_builder_deck_container: GridContainer
 var prep_builder_reserve_container: GridContainer
 
 func _ready() -> void:
-	progression = MetaProgressionScript.new()
+	progression = CharacterPrepViewModelScript.new()
 	progression.load()
 	_build_scene()
 	_reset_starting_build()
@@ -125,27 +126,22 @@ func _build_scene() -> void:
 	right.add_theme_constant_override("separation", 12)
 	root.add_child(right)
 
-	var start_button := _make_action_button("开始挑战", Color(0.18, 0.12, 0.06, 0.96), Color(0.88, 0.62, 0.30, 1.0))
+	var start_button := _make_action_button(_text("prep.action.start", {}, "开始挑战"), Color(0.18, 0.12, 0.06, 0.96), Color(0.88, 0.62, 0.30, 1.0))
 	start_button.name = "StartChallengeButton"
 	start_button.pressed.connect(_on_start_pressed)
 	right.add_child(start_button)
 
-	var growth_button := _make_action_button("角色成长", Color(0.08, 0.11, 0.10, 0.96), Color(0.48, 0.70, 0.52, 1.0))
+	var growth_button := _make_action_button(_text("prep.action.growth", {}, "角色成长"), Color(0.08, 0.11, 0.10, 0.96), Color(0.48, 0.70, 0.52, 1.0))
 	growth_button.name = "GrowthButton"
 	growth_button.pressed.connect(_on_growth_pressed)
 	right.add_child(growth_button)
 
-	var pack_button := _make_action_button("卡包解锁", Color(0.08, 0.10, 0.12, 0.96), Color(0.50, 0.62, 0.76, 1.0))
+	var pack_button := _make_action_button(_text("prep.action.packs", {}, "卡包解锁"), Color(0.08, 0.10, 0.12, 0.96), Color(0.50, 0.62, 0.76, 1.0))
 	pack_button.name = "PackButton"
 	pack_button.pressed.connect(_on_pack_pressed)
 	right.add_child(pack_button)
 
-	var deck_button := _make_action_button("开局构筑", Color(0.10, 0.09, 0.12, 0.96), Color(0.62, 0.54, 0.78, 1.0))
-	deck_button.name = "DeckButton"
-	deck_button.pressed.connect(_on_deck_pressed)
-	right.add_child(deck_button)
-
-	var back_button := _make_action_button("返回角色选择", Color(0.08, 0.09, 0.10, 0.96), Color(0.40, 0.44, 0.50, 1.0))
+	var back_button := _make_action_button(_text("prep.action.back", {}, "返回角色选择"), Color(0.08, 0.09, 0.10, 0.96), Color(0.40, 0.44, 0.50, 1.0))
 	back_button.name = "BackButton"
 	back_button.pressed.connect(_on_back_pressed)
 	right.add_child(back_button)
@@ -178,12 +174,9 @@ func _refresh(message: String = "") -> void:
 	subtitle_label.text = title_text
 	portrait_label.text = job_name
 	_apply_portrait_visual(job)
-	stat_label.text = "生命 %d    攻 %d / 防 %d    基础抽牌 %d    卡组总分上限 %d" % [max_hp, attack, defense, draw_count, deck_score_limit]
-	points_label.text = "修为点：可用 %d    累计 %d" % [
-		progression.points_available(selected_job_id),
-		progression.points_total(selected_job_id)
-	]
-	pack_label.text = "已开放卡包：%s" % _pack_summary()
+	stat_label.text = _text("prep.stats", {"hp": max_hp, "attack": attack, "defense": defense, "draw": draw_count, "score": deck_score_limit}, "生命 {hp}    攻 {attack} / 防 {defense}    基础抽牌 {draw}    卡组总分上限 {score}")
+	points_label.text = _text("prep.points", {"available": progression.points_available(selected_job_id), "total": progression.points_total(selected_job_id)}, "修为点：可用 {available}    累计 {total}")
+	pack_label.text = _text("prep.open_packs", {"packs": _pack_summary()}, "已开放卡包：{packs}")
 	message_label.text = message
 
 func _create_overlay() -> void:
@@ -224,7 +217,7 @@ func _create_overlay() -> void:
 	header.add_child(overlay_title_label)
 
 	var close_button := Button.new()
-	close_button.text = "关闭"
+	close_button.text = _text("common.close", {}, "关闭")
 	close_button.custom_minimum_size = Vector2(92.0, 38.0)
 	close_button.pressed.connect(_on_overlay_close_pressed)
 	_style_button(close_button, Color(0.10, 0.10, 0.11, 0.96), Color(0.54, 0.56, 0.62, 1.0))
@@ -249,7 +242,7 @@ func _create_overlay() -> void:
 	scroll.add_child(overlay_content)
 
 func _on_growth_pressed() -> void:
-	overlay_title_label.text = "角色成长"
+	overlay_title_label.text = _text("prep.growth.title", {}, "角色成长")
 	overlay_message_label.text = _growth_summary_text()
 	_clear_children(overlay_content)
 	var grouped: Dictionary = _group_growth_upgrades()
@@ -262,10 +255,10 @@ func _on_growth_pressed() -> void:
 	overlay.visible = true
 
 func _add_growth_upgrade_row(definition: Dictionary) -> void:
-	var upgrade_id := str(definition.get("id", ""))
-	var level: int = progression.upgrade_level(selected_job_id, upgrade_id)
+	var progression_id := str(definition.get("progression_id", ""))
+	var level: int = progression.upgrade_level(selected_job_id, progression_id)
 	var max_level: int = int(definition.get("max_level", 0))
-	var cost: int = progression.next_upgrade_cost(selected_job_id, upgrade_id)
+	var cost: int = progression.next_upgrade_cost(selected_job_id, progression_id)
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
@@ -276,7 +269,7 @@ func _add_growth_upgrade_row(definition: Dictionary) -> void:
 	row.add_child(text_box)
 
 	var title := Label.new()
-	title.text = "%s  %d/%d" % [str(definition.get("name", upgrade_id)), level, max_level]
+	title.text = "%s  %d/%d" % [str(definition.get("name", progression_id)), level, max_level]
 	title.add_theme_font_size_override("font_size", 17)
 	title.add_theme_color_override("font_color", Color(0.94, 0.90, 0.78, 1.0))
 	text_box.add_child(title)
@@ -292,20 +285,20 @@ func _add_growth_upgrade_row(definition: Dictionary) -> void:
 	button.custom_minimum_size = Vector2(150.0, 42.0)
 	button.focus_mode = Control.FOCUS_NONE
 	if cost <= 0:
-		button.text = "已满级"
+		button.text = _text("prep.growth.max_level", {}, "已满级")
 		button.disabled = true
 	elif progression.points_available(selected_job_id) < cost:
-		button.text = "需要 %d" % cost
+		button.text = _text("prep.growth.need", {"cost": cost}, "需要 {cost}")
 		button.disabled = true
 	else:
-		button.text = "提升 %d" % cost
-		button.pressed.connect(_on_buy_upgrade_pressed.bind(upgrade_id))
+		button.text = _text("prep.growth.upgrade", {"cost": cost}, "提升 {cost}")
+		button.pressed.connect(_on_buy_upgrade_pressed.bind(progression_id))
 	_style_button(button, Color(0.10, 0.13, 0.11, 0.96), Color(0.58, 0.82, 0.46, 1.0))
 	row.add_child(button)
 
-func _on_buy_upgrade_pressed(upgrade_id: String) -> void:
-	var message: String = progression.buy_upgrade(selected_job_id, upgrade_id)
-	if upgrade_id == CARD_UNLOCK_UPGRADE_ID:
+func _on_buy_upgrade_pressed(progression_id: String) -> void:
+	var message: String = progression.buy_upgrade(selected_job_id, progression_id)
+	if progression_id == CARD_UNLOCK_UPGRADE_ID:
 		_refresh_starting_card_pool()
 	_refresh(message)
 	_on_growth_pressed()
@@ -320,16 +313,16 @@ func _growth_summary_text() -> String:
 	var defense: int = int(job.get("defense", 0)) + int(bonuses.get("defense", 0))
 	var draw_count: int = 1 + int(bonuses.get("draw_per_turn", 0))
 	var deck_score_limit: int = BASE_DECK_SCORE_LIMIT + int(bonuses.get("deck_score_limit", 0))
-	return "%s    可用修为点 %d / 累计 %d\n生命 %d    攻 %d / 防 %d    基础抽牌 %d    卡组总分上限 %d" % [
-		progression.title_with_job(selected_job_id, job_name),
-		progression.points_available(selected_job_id),
-		progression.points_total(selected_job_id),
-		max_hp,
-		attack,
-		defense,
-		draw_count,
-		deck_score_limit
-	]
+	return _text("prep.growth.summary", {
+		"title": progression.title_with_job(selected_job_id, job_name),
+		"available": progression.points_available(selected_job_id),
+		"total": progression.points_total(selected_job_id),
+		"hp": max_hp,
+		"attack": attack,
+		"defense": defense,
+		"draw": draw_count,
+		"score": deck_score_limit
+	}, "{title}    可用修为点 {available} / 累计 {total}\n生命 {hp}    攻 {attack} / 防 {defense}    基础抽牌 {draw}    卡组总分上限 {score}")
 
 func _group_growth_upgrades() -> Dictionary:
 	var grouped: Dictionary = {}
@@ -365,45 +358,61 @@ func _add_section_header(title_text: String) -> void:
 
 func _upgrade_cost_text(cost: int) -> String:
 	if cost <= 0:
-		return "已满级。"
+		return _text("prep.growth.cost_max", {}, "已满级。")
 	var available: int = progression.points_available(selected_job_id)
 	if available < cost:
-		return "下级消耗 %d 修为点，当前不足。" % cost
-	return "下级消耗 %d 修为点。" % cost
+		return _text("prep.growth.cost_insufficient", {"cost": cost}, "下级消耗 {cost} 修为点，当前不足。")
+	return _text("prep.growth.cost", {"cost": cost}, "下级消耗 {cost} 修为点。")
 
 func _on_pack_pressed() -> void:
-	overlay_title_label.text = "卡包解锁"
+	overlay_title_label.text = _text("prep.packs.title", {}, "卡包解锁")
 	var unlock_level: int = progression.upgrade_level(selected_job_id, CARD_UNLOCK_UPGRADE_ID)
 	var unlock_definition: Dictionary = ProgressionDatabaseScript.upgrade_definition(selected_job_id, CARD_UNLOCK_UPGRADE_ID)
 	var unlock_max_level: int = int(unlock_definition.get("max_level", 0))
 	var available_points: int = progression.points_available(selected_job_id)
-	overlay_message_label.text = "识藏 %d/%d    可用修为点 %d\n当前奖励、事件、宝箱和坊市只会从已开放卡包中抽取。" % [
-		unlock_level,
-		unlock_max_level,
-		available_points
-	]
+	overlay_message_label.text = _text("prep.packs.summary", {"tier": unlock_level, "max_tier": unlock_max_level, "available": available_points}, "识藏 {tier}/{max_tier}    可用修为点 {available}\n当前奖励、事件、宝箱和坊市只会从已开放卡包中抽取。")
 	_clear_children(overlay_content)
 	var unlocked_packs: Array = CardPoolDatabaseScript.unlocked_packs_for_job(selected_job_id, _unlock_tier())
 	var pack_counts: Dictionary = CardPoolDatabaseScript.pack_card_counts_for_job(selected_job_id)
 	for pack_id_variant in CardPoolDatabaseScript.pack_ids_for_job(selected_job_id):
 		var pack_id := str(pack_id_variant)
-		var state := "已开放" if unlocked_packs.has(pack_id) else "未开放"
-		_add_text_row(CardPoolDatabaseScript.pack_display_name(pack_id), "%s    %d 张" % [state, int(pack_counts.get(pack_id, 0))])
+		var state := _text("prep.packs.open", {}, "已开放") if unlocked_packs.has(pack_id) else _text("prep.packs.closed", {}, "未开放")
+		_add_text_row(CardPoolDatabaseScript.pack_display_name(pack_id), _text("prep.packs.count", {"state": state, "count": int(pack_counts.get(pack_id, 0))}, "{state}    {count} 张"))
 	var next_summary := _next_pack_summary()
-	_add_text_row("下一批", next_summary)
+	_add_text_row(_text("prep.packs.next", {}, "下一批"), next_summary)
 	var unlock_cost: int = progression.next_upgrade_cost(selected_job_id, CARD_UNLOCK_UPGRADE_ID)
 	if unlock_cost > 0:
 		var disabled := available_points < unlock_cost
-		var button_text := "修为点不足" if disabled else "开放下一批"
-		_add_button_row("开放方式", "消耗 %d 修为点" % unlock_cost, button_text, _on_buy_pack_unlock_pressed, disabled, "PackUnlockButton")
+		var button_text := _text("prep.packs.insufficient", {}, "修为点不足") if disabled else _text("prep.packs.unlock_next", {}, "开放下一批")
+		_add_button_row(_text("prep.packs.method", {}, "开放方式"), _text("prep.packs.cost", {"cost": unlock_cost}, "消耗 {cost} 修为点"), button_text, _on_buy_pack_unlock_pressed, disabled, "PackUnlockButton")
 	else:
-		_add_button_row("开放进度", "已开放当前全部批次", "已全部开放", Callable(), true, "PackUnlockButton")
+		_add_button_row(_text("prep.packs.progress", {}, "开放进度"), _text("prep.packs.all_open_desc", {}, "已开放当前全部批次"), _text("prep.packs.all_open", {}, "已全部开放"), Callable(), true, "PackUnlockButton")
 	overlay.visible = true
 
 func _on_deck_pressed() -> void:
-	overlay_title_label.text = "开局构筑"
-	_refresh_prep_deck_builder("点击当前卡组内的卡可移入备选池；点击备选池的卡可加入当前卡组。")
+	overlay_title_label.text = _text("prep.starter.title", {}, "固定初始牌组")
+	_refresh_fixed_start_deck_view()
 	overlay.visible = true
+
+func _refresh_fixed_start_deck_view(message := "") -> void:
+	_clear_children(overlay_content)
+	var fixed_deck: Array = _default_start_deck()
+	var reason: String = _deck_build_block_reason(fixed_deck)
+	var parts: Array = []
+	if message != "":
+		parts.append(message)
+	if reason != "":
+		parts.append(reason)
+	else:
+		parts.append(_text("prep.starter.fixed_rule", {}, "开始探索时将按职业固定初始牌组进入本轮。"))
+	overlay_message_label.text = _text("prep.starter.summary", {"count": fixed_deck.size(), "score": DeckBuildRulesScript.deck_score(fixed_deck), "limit": _deck_score_limit(), "details": "  ".join(parts)}, "初始牌组 {count} 张    卡组总分 {score}/{limit}\n{details}")
+	var counts: Dictionary = _card_counts(fixed_deck)
+	for card_id_variant in fixed_deck:
+		var card_id := str(card_id_variant)
+		if int(counts.get(card_id, 0)) <= 0:
+			continue
+		_add_text_row(card_id, "x%d" % int(counts.get(card_id, 0)))
+		counts[card_id] = 0
 
 func _refresh_prep_deck_builder(message := "") -> void:
 	_clear_children(overlay_content)
@@ -413,17 +422,10 @@ func _refresh_prep_deck_builder(message := "") -> void:
 	if message != "":
 		parts.append(message)
 	if reason != "":
-		parts.append("当前不能开始挑战：%s" % reason)
+		parts.append(_text("prep.deck.invalid", {"reason": reason}, "当前不能开始挑战：{reason}"))
 	else:
-		parts.append("当前构筑可用于开始挑战。")
-	overlay_message_label.text = "卡组 %d/%d-%d    卡组总分 %d/%d\n%s" % [
-		prep_deck_ids.size(),
-		DeckBuildRulesScript.min_deck_size(),
-		DeckBuildRulesScript.max_deck_size(),
-		score,
-		_deck_score_limit(),
-		"  ".join(parts)
-	]
+		parts.append(_text("prep.deck.valid", {}, "当前构筑可用于开始挑战。"))
+	overlay_message_label.text = _text("prep.deck.summary", {"count": prep_deck_ids.size(), "min": DeckBuildRulesScript.min_deck_size(), "max": DeckBuildRulesScript.max_deck_size(), "score": score, "limit": _deck_score_limit(), "details": "  ".join(parts)}, "卡组 {count}/{min}-{max}    卡组总分 {score}/{limit}\n{details}")
 
 	var action_row := HBoxContainer.new()
 	action_row.alignment = BoxContainer.ALIGNMENT_END
@@ -432,7 +434,7 @@ func _refresh_prep_deck_builder(message := "") -> void:
 
 	var reset_button := Button.new()
 	reset_button.name = "PrepDeckResetButton"
-	reset_button.text = "恢复默认"
+	reset_button.text = _text("prep.deck.reset", {}, "恢复默认")
 	reset_button.custom_minimum_size = Vector2(128.0, 38.0)
 	reset_button.focus_mode = Control.FOCUS_NONE
 	reset_button.pressed.connect(_on_reset_prep_deck_pressed)
@@ -445,18 +447,18 @@ func _refresh_prep_deck_builder(message := "") -> void:
 	columns.add_theme_constant_override("separation", 14)
 	overlay_content.add_child(columns)
 
-	var deck_column: Dictionary = _create_prep_deck_column("当前卡组（%d）" % prep_deck_ids.size(), "PrepDeckContainer")
+	var deck_column: Dictionary = _create_prep_deck_column(_text("prep.deck.current_count", {"count": prep_deck_ids.size()}, "当前卡组（{count}）"), "PrepDeckContainer")
 	prep_builder_deck_container = deck_column["container"] as GridContainer
 	columns.add_child(deck_column["panel"] as Control)
 
-	var reserve_column: Dictionary = _create_prep_deck_column("备选池（%d）" % prep_reserve_ids.size(), "PrepReserveContainer")
+	var reserve_column: Dictionary = _create_prep_deck_column(_text("prep.deck.reserve_count", {"count": prep_reserve_ids.size()}, "备选池（{count}）"), "PrepReserveContainer")
 	prep_builder_reserve_container = reserve_column["container"] as GridContainer
 	columns.add_child(reserve_column["panel"] as Control)
 
 	for i in range(prep_deck_ids.size()):
-		_add_prep_builder_card(prep_builder_deck_container, str(prep_deck_ids[i]), "移出", "deck", i)
+		_add_prep_builder_card(prep_builder_deck_container, str(prep_deck_ids[i]), _text("deck.action.remove", {}, "移出"), "deck", i)
 	for i in range(prep_reserve_ids.size()):
-		_add_prep_builder_card(prep_builder_reserve_container, str(prep_reserve_ids[i]), "加入", "reserve", i)
+		_add_prep_builder_card(prep_builder_reserve_container, str(prep_reserve_ids[i]), _text("deck.action.add", {}, "加入"), "reserve", i)
 
 func _create_prep_deck_column(column_title: String, container_name: String) -> Dictionary:
 	return DeckBuilderViewFactoryScript.create_column(
@@ -476,23 +478,23 @@ func _on_prep_builder_card_pressed(_uid: String, source: String, index: int) -> 
 			prep_deck_ids.remove_at(index)
 			prep_reserve_ids.append(card_id)
 			_refresh()
-			_refresh_prep_deck_builder("已移入备选池。")
+			_refresh_prep_deck_builder(_text("prep.deck.moved_to_reserve", {}, "已移入备选池。"))
 		return
 	if index < 0 or index >= prep_reserve_ids.size():
 		return
 	var reserve_card_id := str(prep_reserve_ids[index])
 	if not DeckBuildRulesScript.can_add_card_to_deck(reserve_card_id, prep_deck_ids, _deck_score_limit()):
-		_refresh_prep_deck_builder("无法加入：%s。" % DeckBuildRulesScript.deck_add_block_reason(reserve_card_id, prep_deck_ids, _deck_score_limit()))
+		_refresh_prep_deck_builder(_text("prep.deck.add_failed", {"reason": DeckBuildRulesScript.deck_add_block_reason(reserve_card_id, prep_deck_ids, _deck_score_limit())}, "无法加入：{reason}。"))
 		return
 	prep_reserve_ids.remove_at(index)
 	prep_deck_ids.append(reserve_card_id)
 	_refresh()
-	_refresh_prep_deck_builder("已加入当前卡组。")
+	_refresh_prep_deck_builder(_text("prep.deck.added", {}, "已加入当前卡组。"))
 
 func _on_reset_prep_deck_pressed() -> void:
 	_reset_starting_build()
 	_refresh()
-	_refresh_prep_deck_builder("已恢复默认开局构筑。")
+	_refresh_prep_deck_builder(_text("prep.deck.reset_done", {}, "已恢复默认开局构筑。"))
 
 func _add_text_row(left_text: String, right_text: String) -> void:
 	var row := HBoxContainer.new()
@@ -553,12 +555,11 @@ func _on_overlay_close_pressed() -> void:
 	_refresh()
 
 func _on_start_pressed() -> void:
-	var reason: String = _deck_build_block_reason(prep_deck_ids)
+	var reason: String = _deck_build_block_reason(_default_start_deck())
 	if reason != "":
 		message_label.text = reason
-		_on_deck_pressed()
 		return
-	start_requested.emit(selected_job_id, prep_deck_ids.duplicate(), [])
+	start_requested.emit(selected_job_id, [], [])
 
 func _on_back_pressed() -> void:
 	back_requested.emit()
@@ -578,12 +579,16 @@ func _next_pack_summary() -> String:
 		if not current_packs.has(pack_id):
 			names.append(CardPoolDatabaseScript.pack_display_name(pack_id))
 	if names.is_empty():
-		return "暂无下一批"
+		return _text("prep.packs.no_next", {}, "暂无下一批")
 	return "、".join(names)
 
 func _unlock_tier() -> int:
 	var bonuses: Dictionary = progression.bonuses_for_job(selected_job_id) if progression != null else {}
 	return int(bonuses.get("card_unlock_tier", 0))
+
+
+func _text(text_id: String, params: Dictionary = {}, source_fallback := "") -> String:
+	return LocalizationServiceScript.text(text_id, "zh_cn", params, source_fallback)
 
 func _default_start_deck() -> Array:
 	var job: Dictionary = JobDatabaseScript.get_job(selected_job_id)
@@ -591,20 +596,10 @@ func _default_start_deck() -> Array:
 
 func _reset_starting_build() -> void:
 	prep_deck_ids = _default_start_deck()
-	prep_reserve_ids = _initial_starting_reserve(prep_deck_ids)
+	prep_reserve_ids.clear()
 
 func _refresh_starting_card_pool() -> void:
-	var required_counts: Dictionary = _starting_pool_counts(_default_start_deck())
-	var current_counts: Dictionary = _card_counts(prep_deck_ids)
-	var reserve_counts: Dictionary = _card_counts(prep_reserve_ids)
-	for card_id_variant in reserve_counts.keys():
-		var card_id := str(card_id_variant)
-		current_counts[card_id] = int(current_counts.get(card_id, 0)) + int(reserve_counts.get(card_id, 0))
-	for card_id_variant in _starting_pool_order(_default_start_deck()):
-		var card_id := str(card_id_variant)
-		var missing: int = int(required_counts.get(card_id, 0)) - int(current_counts.get(card_id, 0))
-		for _i in range(max(0, missing)):
-			prep_reserve_ids.append(card_id)
+	_reset_starting_build()
 
 func _initial_starting_reserve(deck_ids: Array) -> Array:
 	var result: Array = []

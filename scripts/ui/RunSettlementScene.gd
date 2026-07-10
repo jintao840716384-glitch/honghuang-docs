@@ -4,6 +4,7 @@ signal return_requested
 signal retry_requested
 
 const UIStyleFactoryScript = preload("res://scripts/ui/UIStyleFactory.gd")
+const LocalizationServiceScript = preload("res://scripts/localization/LocalizationService.gd")
 
 var title_label: Label
 var subtitle_label: Label
@@ -94,20 +95,20 @@ func _build_scene() -> void:
 	button_row.add_theme_constant_override("separation", 14)
 	root.add_child(button_row)
 
-	return_button = _make_button("返回角色界面")
+	return_button = _make_button(_text("settlement.return", {}, "返回角色界面"))
 	return_button.name = "SettlementReturnButton"
 	return_button.pressed.connect(_on_return_pressed)
 	button_row.add_child(return_button)
 
-	retry_button = _make_button("再次挑战")
+	retry_button = _make_button(_text("settlement.retry", {}, "再次挑战"))
 	retry_button.name = "SettlementRetryButton"
 	retry_button.pressed.connect(_on_retry_pressed)
 	button_row.add_child(retry_button)
 
 func _apply_settlement(run_state, settlement: Dictionary) -> void:
 	var completed: bool = bool(settlement.get("completed", false))
-	title_label.text = "探索完成" if completed else "探索失败"
-	subtitle_label.text = "本轮探索已结算，修为点已写入当前角色。" if completed else "本轮探索到此结束，已完成节点的修为点照常结算。"
+	title_label.text = _text("settlement.complete", {}, "探索完成") if completed else _text("settlement.failed", {}, "探索失败")
+	subtitle_label.text = _text("settlement.complete_desc", {}, "本轮探索已结算，修为点已写入当前角色。") if completed else _text("settlement.failed_desc", {}, "本轮探索到此结束，已完成节点的修为点照常结算。")
 
 	var job_name := "未知角色"
 	var title_name := ""
@@ -133,13 +134,13 @@ func _apply_settlement(run_state, settlement: Dictionary) -> void:
 	var multiplier: float = float(settlement.get("multiplier", 1.0))
 	var awarded: int = int(settlement.get("awarded", 0))
 
-	job_label.text = "角色：%s    称号：%s" % [job_name, title_name]
-	layer_label.text = "到达层数：第 %d / %d 层" % [layer_number, layer_count]
-	nodes_label.text = "完成节点：%d" % completed_nodes
-	base_label.text = "基础修为：%d" % base
-	multiplier_label.text = "层数倍率：x%s" % _format_multiplier(multiplier)
-	awarded_label.text = "本次获得修为点：%d" % awarded
-	total_label.text = "当前修为点：可用 %d    累计 %d" % [points_available, points_total]
+	job_label.text = _text("settlement.job_title", {"job": job_name, "title": title_name}, "角色：{job}    称号：{title}")
+	layer_label.text = _text("settlement.layer", {"current": layer_number, "total": layer_count}, "到达层数：第 {current} / {total} 层")
+	nodes_label.text = _text("settlement.nodes", {"count": completed_nodes}, "完成节点：{count}")
+	base_label.text = _text("settlement.base", {"value": base}, "基础修为：{value}")
+	multiplier_label.text = _text("settlement.multiplier", {"value": _format_multiplier(multiplier)}, "层数倍率：x{value}")
+	awarded_label.text = _text("settlement.awarded", {"value": awarded}, "本次获得修为点：{value}")
+	total_label.text = _text("settlement.total", {"available": points_available, "total": points_total}, "当前修为点：可用 {available}    累计 {total}")
 
 func _make_row_label(node_name: String) -> Label:
 	var label := Label.new()
@@ -167,6 +168,9 @@ func _format_multiplier(value: float) -> String:
 	if is_equal_approx(value, floor(value)):
 		return "%d" % int(value)
 	return "%.2f" % value
+
+func _text(text_id: String, params: Dictionary = {}, source_fallback := "") -> String:
+	return LocalizationServiceScript.text(text_id, "zh_cn", params, source_fallback)
 
 func _style_button(button: Button, bg: Color, border: Color) -> void:
 	UIStyleFactoryScript.apply_button_style(button, bg, border, 7, 1, 2, 2, Vector4(24, 24, 22, 22), 0, 0.14, 0.06, 0.18)

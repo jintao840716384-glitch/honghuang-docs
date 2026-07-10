@@ -2,6 +2,7 @@ extends RefCounted
 class_name RunState
 
 const JobDatabaseScript = preload("res://scripts/data/JobDatabase.gd")
+const CardDatabaseScript = preload("res://scripts/data/CardDatabase.gd")
 const CardPoolDatabaseScript = preload("res://scripts/data/CardPoolDatabase.gd")
 const MetaProgressionScript = preload("res://scripts/data/MetaProgression.gd")
 const ProgressionDatabaseScript = preload("res://scripts/data/ProgressionDatabase.gd")
@@ -12,6 +13,7 @@ const RewardServiceScript = preload("res://scripts/run/RewardService.gd")
 const ShopServiceScript = preload("res://scripts/run/ShopService.gd")
 const EventServiceScript = preload("res://scripts/run/EventService.gd")
 const ExplorationRulesScript = preload("res://scripts/run/ExplorationRules.gd")
+const WorldDifficultyDatabaseScript = preload("res://scripts/data/WorldDifficultyDatabase.gd")
 
 const MAIN_STORY_LAYER_COUNT := 3
 const LAYER_RULES := [
@@ -61,10 +63,11 @@ func start(selected_job_id: String, starting_deck_ids: Array = [], starting_rese
 	run_cultivation_awarded = 0
 	run_cultivation_completed = false
 	run_cultivation_settled = false
-	world_difficulty = 0
+	var active_worlds: Array = WorldDifficultyDatabaseScript.active_definitions()
+	world_difficulty = int((active_worlds[0] as Dictionary).get("value", 0)) if not active_worlds.is_empty() else 0
 	base_max_hp = int(job.get("max_hp", 0)) + int(meta_bonuses.get("max_hp", 0))
-	deck_ids = starting_deck_ids.duplicate() if not starting_deck_ids.is_empty() else job.get("start_deck", []).duplicate()
-	reserve_ids = starting_reserve_ids.duplicate()
+	deck_ids = _normalize_card_ids(starting_deck_ids) if not starting_deck_ids.is_empty() else _normalize_card_ids(job.get("start_deck", []))
+	reserve_ids = _normalize_card_ids(starting_reserve_ids)
 	map_nodes = MapGeneratorScript.generate()
 	completed_node_ids.clear()
 	current_node_id = ""
@@ -73,7 +76,7 @@ func start(selected_job_id: String, starting_deck_ids: Array = [], starting_rese
 	status_message = "以%s开始第 1 / %d 层探索。" % [realm_name(), MAIN_STORY_LAYER_COUNT]
 	_apply_realm_stats(true)
 	if deck_build_block_reason(deck_ids) != "":
-		deck_ids = job.get("start_deck", []).duplicate()
+		deck_ids = _normalize_card_ids(job.get("start_deck", []))
 		reserve_ids.clear()
 
 func available_nodes() -> Array:
@@ -125,10 +128,10 @@ func complete_node(node_id: String) -> void:
 	pending_node_id = ""
 
 func update_deck(new_deck_ids: Array) -> void:
-	deck_ids = new_deck_ids.duplicate()
+	deck_ids = _normalize_card_ids(new_deck_ids)
 
 func update_reserve(new_reserve_ids: Array) -> void:
-	reserve_ids = new_reserve_ids.duplicate()
+	reserve_ids = _normalize_card_ids(new_reserve_ids)
 
 func add_spirit_stones(amount: int) -> void:
 	if amount <= 0:
@@ -150,18 +153,19 @@ func cultivation_reward_for_node(node: Dictionary) -> int:
 	return ExplorationRulesScript.cultivation_reward_for_node(node)
 
 func gain_reward_card(card_id: String) -> String:
-	var result: Dictionary = CardAcquisitionRulesScript.card_gain_result(card_id, deck_ids, deck_score_limit)
+	var canonical_id := _normalize_card_id(card_id)
+	var result: Dictionary = CardAcquisitionRulesScript.card_gain_result(canonical_id, deck_ids, deck_score_limit)
 	match str(result.get("destination", "none")):
 		"deck":
-			deck_ids.append(card_id)
+			deck_ids.append(canonical_id)
 		"reserve":
-			reserve_ids.append(card_id)
+			reserve_ids.append(canonical_id)
 		_:
 			return str(result.get("message", "未获得卡牌。"))
 	return str(result.get("message", "未获得卡牌。"))
 
 func apply_treasure_card_reward(card_id: String) -> Dictionary:
-	var result: Dictionary = CardAcquisitionRulesScript.reward_card_result(card_id, deck_ids, deck_score_limit, "宝箱")
+	var result: Dictionary = CardAcquisitionRulesScript.reward_card_result(_normalize_card_id(card_id), deck_ids, deck_score_limit, "宝箱")
 	_apply_card_reward_result(result)
 	return result
 
@@ -178,15 +182,17 @@ func refresh_shop_stock(current_refresh_cost: int, count := 6) -> Dictionary:
 	return result
 
 func buy_shop_card(card_id: String, price: int) -> Dictionary:
-	var result: Dictionary = ShopServiceScript.buy_card_result(card_id, price, spirit_stones, deck_ids, deck_score_limit)
+	var canonical_id := _normalize_card_id(card_id)
+	var result: Dictionary = ShopServiceScript.buy_card_result(canonical_id, price, spirit_stones, deck_ids, deck_score_limit)
 	if not bool(result.get("success", false)):
 		return result
 	spirit_stones = int(result.get("spirit_stones", spirit_stones))
+	var gained_id := _normalize_card_id(str(result.get("card_id", canonical_id)))
 	match str(result.get("destination", "none")):
 		"deck":
-			deck_ids.append(card_id)
+			deck_ids.append(gained_id)
 		"reserve":
-			reserve_ids.append(card_id)
+			reserve_ids.append(gained_id)
 	return result
 
 func shop_sell_price(card_id: String) -> int:
@@ -220,14 +226,14 @@ func high_event_stone_reward() -> int:
 func treasure_card_reward() -> String:
 	return RewardServiceScript.treasure_card_reward(job_id, realm_index, rng, card_unlock_tier())
 
-func treasure_card_rewards(count := 3) -> Array:
+func treasure_card_rewards(count := -1) -> Array:
 	return RewardServiceScript.treasure_card_rewards(job_id, realm_index, rng, card_unlock_tier(), count)
 
 func event_card_for_tier(tier: String) -> String:
 	return RewardServiceScript.event_card_for_tier(tier, job_id, realm_index, rng, card_unlock_tier())
 
-func roll_event_kind() -> String:
-	return EventServiceScript.roll_event_kind(rng)
+func roll_event_id() -> String:
+	return EventServiceScript.roll_event_id(rng)
 
 func minor_event_offer() -> Dictionary:
 	return EventServiceScript.minor_event_offer(job_id, realm_index, rng, card_unlock_tier())
@@ -236,7 +242,7 @@ func windfall_event_offer() -> Dictionary:
 	return EventServiceScript.windfall_event_offer(job_id, realm_index, rng, card_unlock_tier())
 
 func trade_event_offer() -> Dictionary:
-	return EventServiceScript.trade_event_offer(job_id, realm_index, current_hp, reserve_ids, rng, card_unlock_tier())
+	return EventServiceScript.trade_event_offer(job_id, realm_index, current_hp, _normalize_card_ids(reserve_ids), rng, card_unlock_tier())
 
 func apply_event_stone_reward(amount: int, message_template: String) -> Dictionary:
 	var result: Dictionary = EventServiceScript.stone_reward_result(amount, spirit_stones, message_template)
@@ -245,26 +251,26 @@ func apply_event_stone_reward(amount: int, message_template: String) -> Dictiona
 	return result
 
 func apply_event_card_reward(card_id: String, message_prefix: String) -> Dictionary:
-	var result: Dictionary = EventServiceScript.card_reward_result(card_id, deck_ids, deck_score_limit, message_prefix)
+	var result: Dictionary = EventServiceScript.card_reward_result(_normalize_card_id(card_id), deck_ids, deck_score_limit, message_prefix)
 	_apply_card_reward_result(result)
 	return result
 
 func apply_trade_stone_reward(cost: int, card_id: String) -> Dictionary:
-	var result: Dictionary = EventServiceScript.trade_stone_result(cost, card_id, spirit_stones, deck_ids, deck_score_limit)
+	var result: Dictionary = EventServiceScript.trade_stone_result(cost, _normalize_card_id(card_id), spirit_stones, deck_ids, deck_score_limit)
 	if bool(result.get("success", false)):
 		spirit_stones = int(result.get("spirit_stones", spirit_stones))
 		_apply_card_reward_result(result)
 	return result
 
 func apply_trade_hp_reward(cost: int, card_id: String) -> Dictionary:
-	var result: Dictionary = EventServiceScript.trade_hp_result(cost, card_id, current_hp, deck_ids, deck_score_limit)
+	var result: Dictionary = EventServiceScript.trade_hp_result(cost, _normalize_card_id(card_id), current_hp, deck_ids, deck_score_limit)
 	if bool(result.get("success", false)):
 		current_hp = clampi(int(result.get("current_hp", current_hp)), 0, max_hp)
 		_apply_card_reward_result(result)
 	return result
 
 func apply_trade_reserve_reward(reserve_index: int, offered_id: String, card_id: String) -> Dictionary:
-	var result: Dictionary = EventServiceScript.trade_reserve_result(reserve_index, offered_id, card_id, reserve_ids, deck_ids, deck_score_limit)
+	var result: Dictionary = EventServiceScript.trade_reserve_result(reserve_index, _normalize_card_id(offered_id), _normalize_card_id(card_id), _normalize_card_ids(reserve_ids), deck_ids, deck_score_limit)
 	if bool(result.get("success", false)):
 		var remove_index: int = int(result.get("remove_reserve_index", -1))
 		if remove_index >= 0 and remove_index < reserve_ids.size():
@@ -286,7 +292,7 @@ func move_deck_card_to_reserve(index: int) -> String:
 		return "无效卡牌"
 	var card_id := str(deck_ids[index])
 	deck_ids.remove_at(index)
-	reserve_ids.append(card_id)
+	reserve_ids.append(_normalize_card_id(card_id))
 	return ""
 
 func move_reserve_card_to_deck(index: int) -> String:
@@ -296,22 +302,25 @@ func move_reserve_card_to_deck(index: int) -> String:
 	if not DeckBuildRulesScript.can_add_card_to_deck(card_id, deck_ids, deck_score_limit):
 		return DeckBuildRulesScript.deck_add_block_reason(card_id, deck_ids, deck_score_limit)
 	reserve_ids.remove_at(index)
-	deck_ids.append(card_id)
+	deck_ids.append(_normalize_card_id(card_id))
 	return ""
 
 func apply_deck_build(new_deck_ids: Array, new_reserve_ids: Array) -> String:
-	var reason := deck_build_block_reason(new_deck_ids)
+	var canonical_deck_ids := _normalize_card_ids(new_deck_ids)
+	var canonical_reserve_ids := _normalize_card_ids(new_reserve_ids)
+	var reason := deck_build_block_reason(canonical_deck_ids)
 	if reason != "":
 		return reason
-	deck_ids = new_deck_ids.duplicate()
-	reserve_ids = new_reserve_ids.duplicate()
+	deck_ids = canonical_deck_ids
+	reserve_ids = canonical_reserve_ids
 	status_message = "卡组已保存。"
 	return ""
 
 func deck_build_block_reason(candidate_deck_ids: Array) -> String:
-	return DeckBuildRulesScript.deck_build_block_reason(candidate_deck_ids, deck_score_limit)
+	return DeckBuildRulesScript.deck_build_block_reason(_normalize_card_ids(candidate_deck_ids), deck_score_limit)
 
 func battle_start_block_reason() -> String:
+	_canonicalize_card_state()
 	if current_hp <= 0:
 		return "生命为 0，不能进入战斗。"
 	var reason := deck_build_block_reason(deck_ids)
@@ -325,6 +334,7 @@ func battle_start_payload(node_id: String) -> Dictionary:
 			"success": false,
 			"message": "节点不可用。"
 		}
+	_canonicalize_card_state()
 	var block_reason: String = battle_start_block_reason()
 	if block_reason != "":
 		status_message = block_reason
@@ -338,7 +348,7 @@ func battle_start_payload(node_id: String) -> Dictionary:
 		"success": true,
 		"node_id": node_id,
 		"job_id": job_id,
-		"deck_ids": deck_ids.duplicate(),
+		"deck_ids": _normalize_card_ids(deck_ids),
 		"battle_number": battle_number_for_node(node),
 		"encounter_type": str(node.get("type", "normal")),
 		"run_context": run_context(),
@@ -464,7 +474,7 @@ func realm_name() -> String:
 	return "%s%s" % [str(_realm_data().get("name", "练气")), job_name]
 
 func current_deck_score() -> int:
-	return DeckBuildRulesScript.deck_score(deck_ids)
+	return DeckBuildRulesScript.deck_score(_normalize_card_ids(deck_ids))
 
 func run_context() -> Dictionary:
 	return {
@@ -473,7 +483,7 @@ func run_context() -> Dictionary:
 		"draw_per_turn": draw_per_turn,
 		"deck_score_limit": deck_score_limit,
 		"spirit_stones": spirit_stones,
-		"reserve_ids": reserve_ids.duplicate(),
+		"reserve_ids": _normalize_card_ids(reserve_ids),
 		"realm_index": realm_index,
 		"realm_name": realm_name(),
 		"world_difficulty": world_difficulty,
@@ -544,9 +554,22 @@ func _realm_data() -> Dictionary:
 func _apply_card_reward_result(result: Dictionary) -> void:
 	if not bool(result.get("success", false)):
 		return
-	var card_id: String = str(result.get("card_id", ""))
+	var card_id: String = _normalize_card_id(str(result.get("card_id", "")))
 	match str(result.get("destination", "none")):
 		"deck":
 			deck_ids.append(card_id)
 		"reserve":
 			reserve_ids.append(card_id)
+
+func _normalize_card_id(card_id: String) -> String:
+	return CardDatabaseScript.normalize_card_id(card_id)
+
+func _normalize_card_ids(card_ids: Array) -> Array:
+	var result: Array = []
+	for card_id_variant in card_ids:
+		result.append(_normalize_card_id(str(card_id_variant)))
+	return result
+
+func _canonicalize_card_state() -> void:
+	deck_ids = _normalize_card_ids(deck_ids)
+	reserve_ids = _normalize_card_ids(reserve_ids)

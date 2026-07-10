@@ -1,6 +1,8 @@
 extends SceneTree
 
-const BattleScene = preload("res://scenes/BattleScene.tscn")
+const BattleScene = preload("res://scenes/battle/BattleScene.tscn")
+const MainMenuScene = preload("res://scenes/main/MainMenuScene.tscn")
+const CharacterPrepScene = preload("res://scenes/main/CharacterPrepScene.tscn")
 const CardDatabaseScript = preload("res://scripts/data/CardDatabase.gd")
 
 func _init() -> void:
@@ -8,11 +10,83 @@ func _init() -> void:
 
 func _run() -> void:
 	root.size = Vector2i(1920, 1080)
+	var main_menu := MainMenuScene.instantiate()
+	root.add_child(main_menu)
+	await process_frame
+	main_menu.call("_on_settings_pressed")
+	await process_frame
+	var settings_panel: Control = main_menu.get("settings_panel") as Control
+	var game_page_scroll: Control = main_menu.get("game_page_scroll") as Control
+	var keys_page_scroll: Control = main_menu.get("keys_page_scroll") as Control
+	var game_tab_button: Button = main_menu.get("game_tab_button") as Button
+	var keys_tab_button: Button = main_menu.get("keys_tab_button") as Button
+	var controls_section_label = main_menu.get("controls_section_label")
+	var settings_confirm_button: Button = main_menu.get("settings_confirm_button") as Button
+	var settings_cancel_button: Button = main_menu.get("settings_cancel_button") as Button
+	var settings_default_button: Button = main_menu.get("settings_default_button") as Button
+	var main_menu_ok := settings_panel != null
+	main_menu_ok = main_menu_ok and settings_panel.visible
+	main_menu_ok = main_menu_ok and game_page_scroll != null and game_page_scroll.visible
+	main_menu_ok = main_menu_ok and keys_page_scroll != null and not keys_page_scroll.visible
+	main_menu_ok = main_menu_ok and game_tab_button != null and game_tab_button.button_pressed
+	main_menu_ok = main_menu_ok and keys_tab_button != null and not keys_tab_button.button_pressed
+	main_menu_ok = main_menu_ok and controls_section_label == null
+	main_menu_ok = main_menu_ok and settings_confirm_button != null and settings_confirm_button.text != ""
+	main_menu_ok = main_menu_ok and settings_cancel_button != null and settings_cancel_button.text != ""
+	main_menu_ok = main_menu_ok and settings_default_button != null and settings_default_button.text != ""
+	main_menu.call("_set_settings_tab", "keys")
+	await process_frame
+	main_menu_ok = main_menu_ok and not game_page_scroll.visible
+	main_menu_ok = main_menu_ok and keys_page_scroll.visible
+	main_menu_ok = main_menu_ok and not game_tab_button.button_pressed
+	main_menu_ok = main_menu_ok and keys_tab_button.button_pressed
+	main_menu.call("_on_settings_cancel_pressed")
+	await process_frame
+	main_menu_ok = main_menu_ok and not settings_panel.visible
+	main_menu.queue_free()
+	await process_frame
+
+	var prep_scene := CharacterPrepScene.instantiate()
+	root.add_child(prep_scene)
+	prep_scene.setup("sword")
+	await process_frame
+	var prep_layout_ok := prep_scene.find_child("DeckButton", true, false) == null
+	prep_layout_ok = prep_layout_ok and prep_scene.find_child("StartChallengeButton", true, false) != null
+	prep_layout_ok = prep_layout_ok and prep_scene.find_child("GrowthButton", true, false) != null
+	prep_layout_ok = prep_layout_ok and prep_scene.find_child("PackButton", true, false) != null
+	prep_scene.call("_on_growth_pressed")
+	await process_frame
+	prep_layout_ok = prep_layout_ok and prep_scene.overlay.visible
+	prep_layout_ok = prep_layout_ok and prep_scene.overlay_title_label.text == "角色成长"
+	prep_scene.call("_on_pack_pressed")
+	await process_frame
+	prep_layout_ok = prep_layout_ok and prep_scene.overlay.visible
+	prep_layout_ok = prep_layout_ok and prep_scene.overlay_title_label.text == "卡包解锁"
+	var prep_signal := {"job_id": "", "deck_size": -1, "reserve_size": -1}
+	prep_scene.start_requested.connect(func(job_id: String, deck_ids: Array, reserve_ids: Array) -> void:
+		prep_signal["job_id"] = job_id
+		prep_signal["deck_size"] = deck_ids.size()
+		prep_signal["reserve_size"] = reserve_ids.size()
+	)
+	var prep_start_button: Button = prep_scene.find_child("StartChallengeButton", true, false) as Button
+	if prep_start_button != null:
+		prep_start_button.pressed.emit()
+		await process_frame
+		prep_layout_ok = prep_layout_ok and str(prep_signal.get("job_id", "")) == "sword"
+		prep_layout_ok = prep_layout_ok and int(prep_signal.get("deck_size", -1)) == 0
+		prep_layout_ok = prep_layout_ok and int(prep_signal.get("reserve_size", -1)) == 0
+	else:
+		prep_layout_ok = false
+	root.remove_child(prep_scene)
+	prep_scene.queue_free()
+	await process_frame
+
 	var scene := BattleScene.instantiate()
 	root.add_child(scene)
 	scene.setup("sword")
-	for card_id in ["起剑诀", "小无相剑", "养剑匣", "藏锋"]:
-		scene.manager.deck.hand.append(CardDatabaseScript.make_card(card_id))
+	for card_id in ["起剑诀", "小无相剑", "养剑匣", "防御准备"]:
+		scene.manager._manager.deck.hand.append(CardDatabaseScript.make_card(card_id))
+	scene.manager.refresh()
 	scene.render()
 	await process_frame
 	await scene.get_tree().create_timer(4.0).timeout
@@ -77,8 +151,9 @@ func _run() -> void:
 	choice_scene.setup("talisman")
 	var recover_card := CardDatabaseScript.make_card("拾符诀")
 	var grave_card := CardDatabaseScript.make_card("火球符")
-	choice_scene.manager.deck.hand.append(recover_card)
-	choice_scene.manager.deck.graveyard.append(grave_card)
+	choice_scene.manager._manager.deck.hand.append(recover_card)
+	choice_scene.manager._manager.deck.graveyard.append(grave_card)
+	choice_scene.manager.refresh()
 	choice_scene.manager.play_hand_card(str(recover_card.get("uid", "")))
 	choice_scene.render()
 	await process_frame
@@ -120,7 +195,7 @@ func _run() -> void:
 	var hand_exit_position := first_hand_card.position
 	var hand_exit_z := first_hand_card.z_index
 
-	var ok := true
+	var ok := main_menu_ok and prep_layout_ok
 	ok = ok and spell_zone.get_child_count() == 5
 	ok = ok and enemy_spell_zone.get_child_count() == 5
 	ok = ok and enemy_spell_zone.global_position.x > spell_zone.global_position.x
@@ -178,84 +253,16 @@ func _run() -> void:
 	ok = ok and not pile_viewer.visible
 	ok = ok and not pile_overlay.visible
 
-	var response_scene := BattleScene.instantiate()
-	root.add_child(response_scene)
-	response_scene.setup("sword")
-	var response_card := CardDatabaseScript.make_card("护身符")
-	response_card["set_turn"] = 0
-	response_card["cover_turn"] = 0
-	response_card["face_down"] = true
-	response_card["ready"] = true
-	response_card["sealed"] = false
-	response_card["already_in_chain"] = false
-	response_scene.manager.player.spell_zone.append(response_card)
-	response_scene.manager.open_timing_window(response_scene.manager.create_event("player_damage_before", "enemy_attack", "player", 5))
-	response_scene.render()
-	await process_frame
-	await process_frame
-	var chain_overlay: Control = response_scene.get_node("ChainOverlay")
-	var response_confirm_panel: Control = response_scene.get_node("ResponseConfirmPanel")
-	var response_slot: Control = response_scene.get_node("SpellDefenseZone").get_child(0) as Control
-	ok = ok and chain_overlay.visible
-	ok = ok and str(chain_overlay.get_node("ChainTitleLabel").get("text")) == "发动盖伏卡"
-	var result_preview_label: Label = response_scene.get_node("ResultPreviewLabel") as Label
-	var response_instruction_text := str(chain_overlay.get_node("ChainEventLabel").get("text"))
-	var response_preview_text := str(result_preview_label.text)
-	ok = ok and response_instruction_text == "可发动放置区中发光的盖伏卡"
-	ok = ok and result_preview_label.visible
-	ok = ok and response_preview_text.contains("预计结果")
-	ok = ok and result_preview_label.global_position.y + result_preview_label.size.y < (chain_overlay.get_node("ChainTitleLabel") as Control).global_position.y
-	ok = ok and str(chain_overlay.get_node("SkipResponseButton").get("text")) == "结束发动"
-	ok = ok and bool(response_slot.get("response_available"))
-	response_scene.call("_on_spell_zone_slot_pressed", response_card, response_slot.global_position + Vector2(response_slot.size.x * 0.5, response_slot.size.y + 6.0))
-	await process_frame
-	ok = ok and response_confirm_panel.visible
-	response_preview_text = str(result_preview_label.text)
-	ok = ok and response_preview_text.contains("发动护身符后")
-	response_scene.call("_on_confirm_cancel")
-	await process_frame
-	ok = ok and not response_confirm_panel.visible
-	response_scene.call("_on_spell_zone_slot_pressed", response_card, response_slot.global_position + Vector2(response_slot.size.x * 0.5, response_slot.size.y + 6.0))
-	await process_frame
-	response_scene.call("_on_confirm_activate")
-	await process_frame
-	await process_frame
-	ok = ok and not chain_overlay.visible
-	ok = ok and response_scene.manager.deck.graveyard.size() >= 1
-
-	var indicator_scene := BattleScene.instantiate()
-	root.add_child(indicator_scene)
-	indicator_scene.setup("sword")
-	var indicator_card: Dictionary = response_card.duplicate(true)
-	indicator_card["uid"] = "%s_indicator" % str(indicator_card.get("uid", "response"))
-	indicator_card["set_turn"] = 0
-	indicator_card["cover_turn"] = 0
-	indicator_card["face_down"] = true
-	indicator_card["ready"] = true
-	indicator_card["sealed"] = false
-	indicator_card["already_in_chain"] = false
-	indicator_scene.manager.player.spell_zone.append(indicator_card)
-	indicator_scene.manager.end_player_turn()
-	indicator_scene.render()
-	await process_frame
-	await process_frame
-	var indicator_arrow: Control = indicator_scene.get_node("AttackIndicatorLayer")
-	var indicator_enemy_actor: Control = indicator_scene.get_node("EnemyActor")
-	var indicator_player_actor: Control = indicator_scene.get_node("PlayerActor")
-	ok = ok and indicator_scene.manager.phase == "response"
-	ok = ok and indicator_arrow.visible
-	ok = ok and str(indicator_enemy_actor.get("combat_highlight_mode")) == "source"
-	ok = ok and str(indicator_player_actor.get("combat_highlight_mode")) == "target"
-
 	var equipment_scene := BattleScene.instantiate()
 	root.add_child(equipment_scene)
 	equipment_scene.setup("sword")
 	var equip_sword := CardDatabaseScript.make_card("青锋剑")
 	var equip_armor := CardDatabaseScript.make_card("铁木甲")
 	var equip_charm := CardDatabaseScript.make_card("养剑匣")
-	equipment_scene.manager.deck.hand.append(equip_sword)
-	equipment_scene.manager.deck.hand.append(equip_armor)
-	equipment_scene.manager.deck.hand.append(equip_charm)
+	equipment_scene.manager._manager.deck.hand.append(equip_sword)
+	equipment_scene.manager._manager.deck.hand.append(equip_armor)
+	equipment_scene.manager._manager.deck.hand.append(equip_charm)
+	equipment_scene.manager.refresh()
 	equipment_scene.manager.play_hand_card(str(equip_sword.get("uid", "")))
 	equipment_scene.manager.play_hand_card(str(equip_armor.get("uid", "")))
 	equipment_scene.render()
@@ -283,9 +290,9 @@ func _run() -> void:
 	ok = ok and bool(first_equipment.get("response_available"))
 	equipment_scene.call("_on_equipment_slot_pressed", equipment_scene.manager.player.equipment[0], first_equipment.global_position + Vector2(first_equipment.size.x + 6.0, first_equipment.size.y * 0.5))
 	await process_frame
-	ok = ok and equipment_scene.get_node("ResponseConfirmPanel").visible
+	ok = ok and equipment_scene.get_node("EquipmentConfirmPanel").visible
 	ok = ok and first_equipment.position.x > 0.0
-	equipment_scene.call("_on_confirm_activate")
+	equipment_scene.call("_on_equipment_confirm_activate")
 	await process_frame
 	await process_frame
 	ok = ok and equipment_scene.manager.pending_equipment_replace.is_empty()
@@ -296,16 +303,17 @@ func _run() -> void:
 	root.add_child(drag_target_scene)
 	drag_target_scene.setup("sword")
 	var drag_damage_card := CardDatabaseScript.make_card("雷击符")
-	drag_target_scene.manager.deck.hand.append(drag_damage_card)
-	drag_target_scene.manager.add_enemy_unit({
+	drag_target_scene.manager._manager.deck.hand.append(drag_damage_card)
+	drag_target_scene.manager._manager.add_enemy_unit({
 		"id": "drag_dummy",
 		"uid": "drag_dummy",
-		"name": "拖拽靶",
+		"name": "拖拽目标",
 		"max_hp": 12,
 		"attack": 0,
 		"defense": 0,
 		"action_sequence": []
 	}, 0)
+	drag_target_scene.manager.refresh()
 	drag_target_scene.render()
 	await process_frame
 	await process_frame
@@ -324,31 +332,12 @@ func _run() -> void:
 	ok = ok and drag_target_scene.manager.deck.find_hand_card(str(drag_damage_card.get("uid", ""))).is_empty()
 	ok = ok and not bool(drag_dummy_actor.get("drop_available"))
 
-	var drag_zone_scene := BattleScene.instantiate()
-	root.add_child(drag_zone_scene)
-	drag_zone_scene.setup("sword")
-	var drag_defense_card := CardDatabaseScript.make_card("护身符")
-	drag_zone_scene.manager.deck.hand.append(drag_defense_card)
-	drag_zone_scene.render()
-	await process_frame
-	await process_frame
-	var drag_defense_button: Control = drag_zone_scene.call("_find_hand_card_button", str(drag_defense_card.get("uid", ""))) as Control
-	var drag_zone_slot: Control = drag_zone_scene.get_node("SpellDefenseZone").get_child(0) as Control
-	var drag_zone_started: bool = drag_zone_scene.call("_begin_hand_card_drag", drag_defense_button, drag_defense_button.global_position + Vector2(24.0, 24.0))
-	await process_frame
-	ok = ok and drag_zone_started
-	ok = ok and bool(drag_zone_slot.get("drop_available"))
-	drag_zone_scene.call("_finish_hand_card_drag", drag_zone_slot.global_position + drag_zone_slot.size * 0.5)
-	await process_frame
-	await process_frame
-	ok = ok and drag_zone_scene.manager.player.spell_zone.size() == 1
-	ok = ok and drag_zone_scene.manager.deck.find_hand_card(str(drag_defense_card.get("uid", ""))).is_empty()
-
 	var drag_equipment_scene := BattleScene.instantiate()
 	root.add_child(drag_equipment_scene)
 	drag_equipment_scene.setup("sword")
 	var drag_equipment_card := CardDatabaseScript.make_card("青锋剑")
-	drag_equipment_scene.manager.deck.hand.append(drag_equipment_card)
+	drag_equipment_scene.manager._manager.deck.hand.append(drag_equipment_card)
+	drag_equipment_scene.manager.refresh()
 	drag_equipment_scene.render()
 	await process_frame
 	await process_frame
@@ -369,7 +358,7 @@ func _run() -> void:
 	var drag_ally_equipment_scene := BattleScene.instantiate()
 	root.add_child(drag_ally_equipment_scene)
 	drag_ally_equipment_scene.setup("sword")
-	drag_ally_equipment_scene.manager.add_player_summon({
+	drag_ally_equipment_scene.manager._manager.add_player_summon({
 		"id": "drag_equip_ally",
 		"uid": "drag_equip_ally",
 		"name": "拖拽装备友军",
@@ -378,7 +367,8 @@ func _run() -> void:
 		"defense": 0
 	}, 1)
 	var drag_ally_equipment_card := CardDatabaseScript.make_card("铁木甲")
-	drag_ally_equipment_scene.manager.deck.hand.append(drag_ally_equipment_card)
+	drag_ally_equipment_scene.manager._manager.deck.hand.append(drag_ally_equipment_card)
+	drag_ally_equipment_scene.manager.refresh()
 	drag_ally_equipment_scene.render()
 	await process_frame
 	await process_frame
@@ -393,6 +383,7 @@ func _run() -> void:
 	drag_ally_equipment_scene.call("_finish_hand_card_drag", drag_ally_actor.global_position + drag_ally_actor.size * drag_ally_actor.scale * 0.5)
 	await process_frame
 	await process_frame
+	drag_ally_unit = drag_ally_equipment_scene.manager.formation.living_unit_by_uid("player", "drag_equip_ally")
 	ok = ok and drag_ally_unit.equipment.size() == 1
 	ok = ok and drag_ally_unit.current_defense() == drag_ally_defense_before + 1
 	ok = ok and drag_ally_equipment_scene.manager.deck.find_hand_card(str(drag_ally_equipment_card.get("uid", ""))).is_empty()
@@ -401,7 +392,8 @@ func _run() -> void:
 	root.add_child(drag_direct_scene)
 	drag_direct_scene.setup("sword")
 	var drag_direct_card := CardDatabaseScript.make_card("起剑诀")
-	drag_direct_scene.manager.deck.hand.append(drag_direct_card)
+	drag_direct_scene.manager._manager.deck.hand.append(drag_direct_card)
+	drag_direct_scene.manager.refresh()
 	drag_direct_scene.render()
 	await process_frame
 	await process_frame
@@ -413,32 +405,42 @@ func _run() -> void:
 	formation_scene.setup("sword")
 	var formation_player_position := (formation_scene.get_node("PlayerActor") as Control).global_position
 	var formation_enemy_position := (formation_scene.get_node("EnemyActor") as Control).global_position
-	ok = ok and formation_scene.get_node_or_null("BattleDebugTools") != null
-	ok = ok and formation_scene.get_node_or_null("DebugToolsToggleButton") != null
-	ok = ok and not (formation_scene.get_node("BattleDebugTools") as Control).visible
+	ok = ok and formation_scene.get_node_or_null("BattleDebugTools") == null
+	ok = ok and formation_scene.get_node_or_null("DebugToolsToggleButton") == null
 	formation_scene.call("_on_debug_toggle")
 	await process_frame
-	ok = ok and (formation_scene.get_node("BattleDebugTools") as Control).visible
-	formation_scene.call("_on_debug_toggle")
-	await process_frame
-	ok = ok and not (formation_scene.get_node("BattleDebugTools") as Control).visible
+	ok = ok and formation_scene.get_node_or_null("BattleDebugTools") == null
+	ok = ok and formation_scene.get_node_or_null("DebugToolsToggleButton") == null
 	var enemy_count_before_debug: int = formation_scene.manager.enemy_target_count()
 	formation_scene.call("_on_debug_add_enemy")
-	ok = ok and formation_scene.manager.enemy_target_count() == enemy_count_before_debug + 1
+	ok = ok and formation_scene.manager.enemy_target_count() == enemy_count_before_debug
 	var player_count_before_debug: int = formation_scene.manager.player_target_count()
 	formation_scene.call("_on_debug_add_ally")
-	ok = ok and formation_scene.manager.player_target_count() == player_count_before_debug + 1
+	ok = ok and formation_scene.manager.player_target_count() == player_count_before_debug
 	formation_scene.call("_on_debug_clear_extra_enemies")
-	ok = ok and formation_scene.manager.enemy_target_count() == 1
-	ok = ok and formation_scene.manager.player_target_count() == 1
-	formation_scene.manager.add_enemy_unit({
+	ok = ok and formation_scene.manager.enemy_target_count() == enemy_count_before_debug
+	ok = ok and formation_scene.manager.player_target_count() == player_count_before_debug
+	var debug_target = formation_scene.manager.selected_debug_unit()
+	if debug_target != null:
+		var debug_hp_before: int = int(debug_target.hp)
+		var debug_attack_before: int = int(debug_target.attack)
+		var debug_defense_before: int = int(debug_target.defense)
+		formation_scene.call("_on_debug_damage_target", 5)
+		formation_scene.call("_on_debug_heal_target", 5)
+		formation_scene.call("_on_debug_modify_target_attack", 1)
+		formation_scene.call("_on_debug_modify_target_defense", 1)
+		ok = ok and int(debug_target.hp) == debug_hp_before
+		ok = ok and int(debug_target.attack) == debug_attack_before
+		ok = ok and int(debug_target.defense) == debug_defense_before
+	formation_scene.manager._manager.add_enemy_unit({
 		"id": "training_dummy",
-		"name": "练功桩",
+		"name": "练功傀儡",
 		"max_hp": 12,
 		"attack": 0,
 		"defense": 0,
 		"action_sequence": []
 	}, 0)
+	formation_scene.manager.refresh()
 	formation_scene.render()
 	await process_frame
 	await process_frame
@@ -499,7 +501,7 @@ func _run() -> void:
 	ok = ok and target_result_preview_label.visible
 	ok = ok and target_preview_text.contains("预计结果")
 	ok = ok and target_preview_text.contains("预计造成")
-	ok = ok and target_preview_text.contains("练功桩")
+	ok = ok and target_preview_text.contains("练功傀儡")
 	var dummy_hp_before: int = int(formation_scene.manager.formation.living_unit_by_uid("enemy", "training_dummy").hp)
 	var formation_click := InputEventMouseButton.new()
 	formation_click.button_index = MOUSE_BUTTON_LEFT

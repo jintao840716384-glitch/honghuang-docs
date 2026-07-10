@@ -39,14 +39,15 @@ static func refresh_result(spirit_stones: int, refresh_cost: int, job_id: String
 
 
 static func buy_card_result(card_id: String, price: int, spirit_stones: int, deck_ids: Array, score_limit := 0) -> Dictionary:
-	var gain_result: Dictionary = CardAcquisitionRulesScript.card_gain_result(card_id, deck_ids, score_limit)
+	var canonical_id := CardDatabaseScript.normalize_card_id(card_id)
+	var gain_result: Dictionary = CardAcquisitionRulesScript.card_gain_result(canonical_id, deck_ids, score_limit)
 	if not bool(gain_result.get("valid", false)):
 		return {
 			"success": false,
 			"message": str(gain_result.get("message", "无法购买。")),
 			"spirit_stones": spirit_stones,
 			"destination": "none",
-			"card_id": card_id
+			"card_id": canonical_id
 		}
 	if spirit_stones < price:
 		return {
@@ -54,15 +55,15 @@ static func buy_card_result(card_id: String, price: int, spirit_stones: int, dec
 			"message": "灵石不足，无法购买。",
 			"spirit_stones": spirit_stones,
 			"destination": "none",
-			"card_id": card_id
+			"card_id": canonical_id
 		}
 	return {
 		"success": true,
-		"message": "买下 %s，%s" % [card_id, str(gain_result.get("message", ""))],
+		"message": "买下 %s，%s" % [canonical_id, str(gain_result.get("message", ""))],
 		"spirit_stones": spirit_stones - max(0, price),
 		"destination": str(gain_result.get("destination", "reserve")),
 		"reason": str(gain_result.get("reason", "")),
-		"card_id": card_id,
+		"card_id": canonical_id,
 		"price": price
 	}
 
@@ -72,19 +73,20 @@ static func sell_price(card_id: String) -> int:
 
 
 static func sell_card_result(card_id: String, spirit_stones: int) -> Dictionary:
-	var price: int = sell_price(card_id)
-	if card_id == "" or CardDatabaseScript.get_card(card_id).is_empty() or price <= 0:
+	var canonical_id := CardDatabaseScript.normalize_card_id(card_id)
+	var price: int = sell_price(canonical_id)
+	if canonical_id == "" or CardDatabaseScript.get_card(canonical_id).is_empty() or price <= 0:
 		return {
 			"success": false,
 			"message": "该卡不能出售。",
 			"spirit_stones": spirit_stones,
-			"card_id": card_id,
+			"card_id": canonical_id,
 			"price": 0
 		}
 	return {
 		"success": true,
-		"message": "售出 %s，获得 %d 灵石。" % [card_id, price],
+		"message": "售出 %s，获得 %d 灵石。" % [canonical_id, price],
 		"spirit_stones": spirit_stones + price,
-		"card_id": card_id,
+		"card_id": canonical_id,
 		"price": price
 	}

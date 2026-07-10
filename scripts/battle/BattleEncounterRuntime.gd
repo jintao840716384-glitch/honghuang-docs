@@ -40,14 +40,6 @@ static func draw_per_turn(encounter_profile: Dictionary, encounter_type: String)
 	if not encounter_profile.is_empty():
 		return max(0, int(encounter_profile.get("draw_per_turn", 1)))
 	match encounter_type:
-		"elite":
-			return 2
 		"boss":
-			return 3
+			return 2
 	return 1
-
-
-static func card_play_limit(encounter_profile: Dictionary, encounter_type: String) -> int:
-	if not encounter_profile.is_empty():
-		return max(0, int(encounter_profile.get("card_play_limit", draw_per_turn(encounter_profile, encounter_type))))
-	return draw_per_turn(encounter_profile, encounter_type)

@@ -1,13 +1,15 @@
 extends SceneTree
 
-const MainScene = preload("res://scenes/Main.tscn")
-const MainMenuScene = preload("res://scenes/MainMenuScene.tscn")
-const JobSelectScene = preload("res://scenes/JobSelectScene.tscn")
-const CharacterPrepScene = preload("res://scenes/CharacterPrepScene.tscn")
-const MapScene = preload("res://scenes/MapScene.tscn")
-const BattleScene = preload("res://scenes/BattleScene.tscn")
-const RunSettlementScene = preload("res://scenes/RunSettlementScene.tscn")
+const MainScene = preload("res://scenes/main/Main.tscn")
+const MainMenuScene = preload("res://scenes/main/MainMenuScene.tscn")
+const JobSelectScene = preload("res://scenes/main/JobSelectScene.tscn")
+const CharacterPrepScene = preload("res://scenes/main/CharacterPrepScene.tscn")
+const MapScene = preload("res://scenes/map/MapScene.tscn")
+const BattleScene = preload("res://scenes/battle/BattleScene.tscn")
+const RunSettlementScene = preload("res://scenes/main/RunSettlementScene.tscn")
 const RunStateScript = preload("res://scripts/run/RunState.gd")
+const JobDatabaseScript = preload("res://scripts/data/JobDatabase.gd")
+const EventDatabaseScript = preload("res://scripts/data/EventDatabase.gd")
 
 func _init() -> void:
 	_run.call_deferred()
@@ -56,14 +58,16 @@ func _run() -> void:
 	start_challenge_button.pressed.emit()
 	await process_frame
 	ok = ok and str(prep_signal.get("job_id", "")) == "sword"
-	ok = ok and int(prep_signal.get("deck_size", 0)) >= 10
+	ok = ok and int(prep_signal.get("deck_size", -1)) == 0
 	ok = ok and int(prep_signal.get("reserve_size", -1)) == 0
-	ok = ok and prep_scene.prep_reserve_ids.size() >= 1
+	ok = ok and prep_scene.prep_deck_ids == (JobDatabaseScript.get_job("sword").get("start_deck", []) as Array)
+	ok = ok and prep_scene.prep_reserve_ids.is_empty()
+	ok = ok and prep_scene.find_child("DeckButton", true, false) == null
 	prep_scene.call("_on_growth_pressed")
 	await process_frame
 	ok = ok and prep_scene.overlay.visible
 	ok = ok and prep_scene.overlay_title_label.text == "角色成长"
-	ok = ok and prep_scene.overlay_message_label.text.contains("可用修为点")
+	ok = ok and prep_scene.overlay_message_label.text.contains("可用修为")
 	ok = ok and prep_scene.overlay_content.find_child("GrowthSection_基础属性", true, false) != null
 	prep_scene.call("_on_pack_pressed")
 	await process_frame
@@ -74,15 +78,25 @@ func _run() -> void:
 	prep_scene.call("_on_deck_pressed")
 	await process_frame
 	ok = ok and prep_scene.overlay.visible
-	ok = ok and prep_scene.overlay_title_label.text == "开局构筑"
-	ok = ok and prep_scene.overlay_content.find_child("PrepDeckContainer", true, false) != null
-	ok = ok and prep_scene.overlay_content.find_child("PrepReserveContainer", true, false) != null
+	ok = ok and prep_scene.overlay_title_label.text == "固定初始牌组"
+	ok = ok and prep_scene.overlay_content.find_child("PrepDeckContainer", true, false) == null
+	ok = ok and prep_scene.overlay_content.find_child("PrepReserveContainer", true, false) == null
 	root.remove_child(prep_scene)
 	prep_scene.queue_free()
 
 	var run_state = RunStateScript.new()
 	run_state.start("sword")
+	ok = ok and run_state.deck_ids == (JobDatabaseScript.get_job("sword").get("start_deck", []) as Array)
 	ok = ok and run_state.available_nodes().size() >= 1
+	var payload_state = RunStateScript.new()
+	payload_state.start("sword")
+	var payload_node: Dictionary = payload_state.available_nodes()[0]
+	var payload: Dictionary = payload_state.battle_start_payload(str(payload_node.get("id", "")))
+	var payload_deck: Array = payload.get("deck_ids", []) as Array
+	ok = ok and bool(payload.get("success", false))
+	ok = ok and payload_deck == (JobDatabaseScript.get_job("sword").get("start_deck", []) as Array)
+	for old_active_id in ["破防准备", "削攻准备", "疗伤", "清除增益", "中毒", "防御准备", "急抽", "空卡"]:
+		ok = ok and not payload_deck.has(old_active_id)
 
 	var settlement_scene := RunSettlementScene.instantiate()
 	root.add_child(settlement_scene)
@@ -133,7 +147,8 @@ func _run() -> void:
 			break
 	ok = ok and not treasure_node.is_empty()
 	if not treasure_node.is_empty():
-		run_state.current_hp = max(1, run_state.max_hp - 6)
+		run_state.update_life(max(1, run_state.max_hp - 6))
+		map_scene.run_state.refresh()
 		map_scene.call("_open_treasure_node", treasure_node)
 		await process_frame
 		ok = ok and map_scene.map_modal_overlay.visible
@@ -142,8 +157,11 @@ func _run() -> void:
 		var treasure_grid: GridContainer = map_scene.map_modal_options_container.get_child(0) as GridContainer
 		ok = ok and treasure_grid != null
 		ok = ok and treasure_grid.get_child_count() >= 3
-	run_state.reserve_ids.append("雷击符")
-	map_scene.call("_open_shop_sell_view", "测试出售。")
+	var sell_reserve: Array = run_state.reserve_ids.duplicate()
+	sell_reserve.append("quick_draw")
+	run_state.update_reserve(sell_reserve)
+	map_scene.run_state.refresh()
+	map_scene.call("_open_shop_sell_view", "测试出售")
 	await process_frame
 	ok = ok and map_scene.map_modal_overlay.visible
 	ok = ok and map_scene.map_modal_title_label.text == "坊市 - 出售"
@@ -164,6 +182,7 @@ func _run() -> void:
 			shop_node = map_node
 			break
 	run_state.add_spirit_stones(999)
+	map_scene.run_state.refresh()
 	if not shop_node.is_empty():
 		map_scene.call("_open_shop_node", shop_node)
 		await process_frame
@@ -177,7 +196,7 @@ func _run() -> void:
 				var buy_button: Button = buy_slot.get_child(1) as Button
 				ok = ok and str(buy_card.get_node("CardLayout/OwnershipLabel").get("text")).contains("卡组")
 				ok = ok and buy_button.text.begins_with("购买 ")
-	map_scene.call("_open_trade_event")
+	ok = ok and bool(map_scene.call("_open_event_by_id", EventDatabaseScript.EVENT_ID_TRADE))
 	await process_frame
 	ok = ok and map_scene.map_modal_overlay.visible
 	ok = ok and map_scene.map_modal_title_label.text == "试炼交易"
@@ -213,7 +232,7 @@ func _run() -> void:
 	ok = ok and battle.manager != null
 	ok = ok and not battle.manager.auto_advance_after_reward
 	ok = ok and battle.manager.player.hp == run_state.current_hp
-	battle.manager.enemy.hp = 1
+	battle.manager.apply_damage_to_unit(battle.manager.enemy, max(0, int(battle.manager.enemy.hp) - 1), "RunFlow")
 	battle.manager.player_normal_attack()
 	battle.render()
 	await process_frame
@@ -243,7 +262,8 @@ func _run() -> void:
 	defeat_battle.run_abandoned.connect(func() -> void:
 		abandon_state["abandoned"] = true
 	)
-	defeat_battle.manager.phase = "defeat"
+	defeat_battle.manager.apply_damage_to_unit(defeat_battle.manager.player, int(defeat_battle.manager.player.hp) + 99, "RunFlow")
+	defeat_battle.manager.check_victory_or_defeat()
 	defeat_battle.render()
 	defeat_battle.call("_on_restart")
 	await process_frame

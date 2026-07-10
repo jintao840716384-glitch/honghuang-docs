@@ -1,7 +1,7 @@
 extends PanelContainer
 class_name CardPileViewer
 
-const CardButtonScene = preload("res://scenes/CardButton.tscn")
+const CardButtonScene = preload("res://scenes/ui/CardButton.tscn")
 
 signal viewer_closed
 
@@ -14,7 +14,7 @@ func _ready() -> void:
 	_apply_style()
 
 func open(title: String, cards: Array) -> void:
-	title_label.text = "%s（%d）" % [title, cards.size()]
+	title_label.text = "%s（%d 张）" % [title, cards.size()]
 	_clear_children(card_container)
 	if cards.is_empty():
 		var label := Label.new()

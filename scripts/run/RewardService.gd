@@ -1,9 +1,11 @@
 extends RefCounted
 class_name RewardService
 
+const CardDatabaseScript = preload("res://scripts/data/CardDatabase.gd")
 const CardPoolDatabaseScript = preload("res://scripts/data/CardPoolDatabase.gd")
 const CardAcquisitionRulesScript = preload("res://scripts/run/CardAcquisitionRules.gd")
 const ExplorationRulesScript = preload("res://scripts/run/ExplorationRules.gd")
+const MapContentDatabaseScript = preload("res://scripts/data/MapContentDatabase.gd")
 
 
 static func battle_spirit_reward(realm_index: int, node: Dictionary) -> int:
@@ -21,11 +23,11 @@ static func cultivation_reward_for_node(node: Dictionary) -> int:
 
 
 static func card_gain_result(card_id: String, deck_ids: Array, score_limit := 0) -> Dictionary:
-	return CardAcquisitionRulesScript.card_gain_result(card_id, deck_ids, score_limit)
+	return CardAcquisitionRulesScript.card_gain_result(CardDatabaseScript.normalize_card_id(card_id), deck_ids, score_limit)
 
 
 static func reward_card_result(card_id: String, deck_ids: Array, score_limit: int, message_prefix: String) -> Dictionary:
-	return CardAcquisitionRulesScript.reward_card_result(card_id, deck_ids, score_limit, message_prefix)
+	return CardAcquisitionRulesScript.reward_card_result(CardDatabaseScript.normalize_card_id(card_id), deck_ids, score_limit, message_prefix)
 
 
 static func battle_card_rewards(job_id: String, encounter_type: String, unlock_tier: int, rng, count := 3) -> Array:
@@ -56,10 +58,13 @@ static func treasure_card_reward(job_id: String, realm_index: int, rng, unlock_t
 	return random_card_by_cost(job_id, rng, 1 + realm_index, 8 + realm_index * 3, unlock_tier)
 
 
-static func treasure_card_rewards(job_id: String, realm_index: int, rng, unlock_tier: int, count := 3) -> Array:
+static func treasure_card_rewards(job_id: String, realm_index: int, rng, unlock_tier: int, count := -1) -> Array:
 	var result: Array = []
+	var target_count := count
+	if target_count < 0:
+		target_count = int(MapContentDatabaseScript.active_treasure().get("choice_count", 3))
 	var attempts := 0
-	while result.size() < count and attempts < 60:
+	while result.size() < target_count and attempts < 60:
 		attempts += 1
 		var card_id: String = treasure_card_reward(job_id, realm_index, rng, unlock_tier)
 		if card_id != "" and not result.has(card_id):

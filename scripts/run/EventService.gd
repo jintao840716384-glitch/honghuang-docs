@@ -1,18 +1,35 @@
 extends RefCounted
 class_name EventService
 
+const CardDatabaseScript = preload("res://scripts/data/CardDatabase.gd")
+const EventDatabaseScript = preload("res://scripts/data/EventDatabase.gd")
 const DeckBuildRulesScript = preload("res://scripts/run/DeckBuildRules.gd")
 const CardAcquisitionRulesScript = preload("res://scripts/run/CardAcquisitionRules.gd")
 const RewardServiceScript = preload("res://scripts/run/RewardService.gd")
 
 
-static func roll_event_kind(rng) -> String:
-	var roll: float = _rng_float(rng)
-	if roll < 0.08:
-		return "windfall"
-	if roll < 0.38:
-		return "trade"
-	return "minor"
+static func roll_event_id(rng) -> String:
+	return event_id_from_definitions(rng, EventDatabaseScript.active_event_definitions())
+
+
+static func event_id_from_definitions(rng, definitions: Array) -> String:
+	var active_definitions: Array = EventDatabaseScript.filter_active_definitions(definitions)
+	if active_definitions.is_empty():
+		return ""
+	var total_weight := 0.0
+	for definition_variant in active_definitions:
+		var definition: Dictionary = definition_variant
+		total_weight += float(definition.get("weight", 0.0))
+	if total_weight <= 0.0:
+		return ""
+	var weighted_roll: float = _rng_float(rng) * total_weight
+	var cumulative_weight := 0.0
+	for definition_variant in active_definitions:
+		var definition: Dictionary = definition_variant
+		cumulative_weight += float(definition.get("weight", 0.0))
+		if weighted_roll < cumulative_weight:
+			return str(definition.get("event_id", ""))
+	return ""
 
 
 static func minor_event_offer(job_id: String, realm_index: int, rng, unlock_tier: int) -> Dictionary:
@@ -56,7 +73,7 @@ static func trade_event_offer(job_id: String, realm_index: int, current_hp: int,
 	}
 	var reserve_index: int = highest_reserve_card_index(reserve_ids)
 	if reserve_index >= 0:
-		var offered_id: String = str(reserve_ids[reserve_index])
+		var offered_id: String = CardDatabaseScript.normalize_card_id(str(reserve_ids[reserve_index]))
 		var offered_cost: int = DeckBuildRulesScript.card_score(offered_id)
 		result["exchange_option"] = {
 			"reserve_index": reserve_index,
@@ -76,26 +93,27 @@ static func stone_reward_result(amount: int, spirit_stones: int, message_templat
 
 
 static func card_reward_result(card_id: String, deck_ids: Array, score_limit: int, message_prefix: String) -> Dictionary:
-	return CardAcquisitionRulesScript.reward_card_result(card_id, deck_ids, score_limit, message_prefix)
+	return CardAcquisitionRulesScript.reward_card_result(CardDatabaseScript.normalize_card_id(card_id), deck_ids, score_limit, message_prefix)
 
 
 static func trade_stone_result(cost: int, card_id: String, spirit_stones: int, deck_ids: Array, score_limit: int) -> Dictionary:
+	var canonical_id := CardDatabaseScript.normalize_card_id(card_id)
 	if spirit_stones < cost:
 		return {
 			"success": false,
 			"message": "灵石不足。可以选择其他代价，或领取保底。",
 			"spirit_stones": spirit_stones,
 			"destination": "none",
-			"card_id": card_id
+			"card_id": canonical_id
 		}
-	var gain_result: Dictionary = CardAcquisitionRulesScript.card_gain_result(card_id, deck_ids, score_limit)
+	var gain_result: Dictionary = CardAcquisitionRulesScript.card_gain_result(canonical_id, deck_ids, score_limit)
 	if not bool(gain_result.get("valid", false)):
 		return {
 			"success": false,
 			"message": str(gain_result.get("message", "未获得卡牌。")),
 			"spirit_stones": spirit_stones,
 			"destination": "none",
-			"card_id": card_id
+			"card_id": canonical_id
 		}
 	return {
 		"success": true,
@@ -103,27 +121,28 @@ static func trade_stone_result(cost: int, card_id: String, spirit_stones: int, d
 		"spirit_stones": spirit_stones - max(0, cost),
 		"destination": str(gain_result.get("destination", "reserve")),
 		"reason": str(gain_result.get("reason", "")),
-		"card_id": card_id
+		"card_id": canonical_id
 	}
 
 
 static func trade_hp_result(cost: int, card_id: String, current_hp: int, deck_ids: Array, score_limit: int) -> Dictionary:
+	var canonical_id := CardDatabaseScript.normalize_card_id(card_id)
 	if cost <= 0 or current_hp - cost <= 0:
 		return {
 			"success": false,
 			"message": "生命不足，无法支付该代价。",
 			"current_hp": current_hp,
 			"destination": "none",
-			"card_id": card_id
+			"card_id": canonical_id
 		}
-	var gain_result: Dictionary = CardAcquisitionRulesScript.card_gain_result(card_id, deck_ids, score_limit)
+	var gain_result: Dictionary = CardAcquisitionRulesScript.card_gain_result(canonical_id, deck_ids, score_limit)
 	if not bool(gain_result.get("valid", false)):
 		return {
 			"success": false,
 			"message": str(gain_result.get("message", "未获得卡牌。")),
 			"current_hp": current_hp,
 			"destination": "none",
-			"card_id": card_id
+			"card_id": canonical_id
 		}
 	return {
 		"success": true,
@@ -131,35 +150,37 @@ static func trade_hp_result(cost: int, card_id: String, current_hp: int, deck_id
 		"current_hp": current_hp - cost,
 		"destination": str(gain_result.get("destination", "reserve")),
 		"reason": str(gain_result.get("reason", "")),
-		"card_id": card_id
+		"card_id": canonical_id
 	}
 
 
 static func trade_reserve_result(reserve_index: int, offered_id: String, card_id: String, reserve_ids: Array, deck_ids: Array, score_limit: int) -> Dictionary:
+	var canonical_id := CardDatabaseScript.normalize_card_id(card_id)
+	var canonical_offered_id := CardDatabaseScript.normalize_card_id(offered_id)
 	if reserve_index < 0 or reserve_index >= reserve_ids.size():
 		return {
 			"success": false,
 			"message": "备牌区没有可交易的卡。",
 			"destination": "none",
-			"card_id": card_id,
+			"card_id": canonical_id,
 			"remove_reserve_index": -1
 		}
-	var actual_offered_id: String = str(reserve_ids[reserve_index])
-	if offered_id != "" and offered_id != actual_offered_id:
+	var actual_offered_id: String = CardDatabaseScript.normalize_card_id(str(reserve_ids[reserve_index]))
+	if canonical_offered_id != "" and canonical_offered_id != actual_offered_id:
 		return {
 			"success": false,
 			"message": "交易目标已变化，请重新选择。",
 			"destination": "none",
-			"card_id": card_id,
+			"card_id": canonical_id,
 			"remove_reserve_index": -1
 		}
-	var gain_result: Dictionary = CardAcquisitionRulesScript.card_gain_result(card_id, deck_ids, score_limit)
+	var gain_result: Dictionary = CardAcquisitionRulesScript.card_gain_result(canonical_id, deck_ids, score_limit)
 	if not bool(gain_result.get("valid", false)):
 		return {
 			"success": false,
 			"message": str(gain_result.get("message", "未获得卡牌。")),
 			"destination": "none",
-			"card_id": card_id,
+			"card_id": canonical_id,
 			"remove_reserve_index": -1
 		}
 	return {
@@ -167,7 +188,7 @@ static func trade_reserve_result(reserve_index: int, offered_id: String, card_id
 		"message": "试炼交易：交出 %s，%s" % [actual_offered_id, str(gain_result.get("message", ""))],
 		"destination": str(gain_result.get("destination", "reserve")),
 		"reason": str(gain_result.get("reason", "")),
-		"card_id": card_id,
+		"card_id": canonical_id,
 		"remove_reserve_index": reserve_index
 	}
 

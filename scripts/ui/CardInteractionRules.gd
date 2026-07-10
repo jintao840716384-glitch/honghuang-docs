@@ -31,11 +31,18 @@ static func card_drag_rule(card: Dictionary) -> String:
 		return "spell_zone"
 	if after_use == "equipment":
 		return "unit_equipment"
+	match str(card.get("target_scope", "")):
+		"ally_unit":
+			return "ally_unit"
+		"enemy_unit":
+			return "enemy_unit"
 	if card_needs_enemy_target(card):
 		return "enemy_unit"
 	return "direct"
 
 static func card_needs_enemy_target(card: Dictionary) -> bool:
+	if str(card.get("target_scope", "")) == "enemy_unit":
+		return true
 	var effect: Dictionary = card.get("effect", {})
 	return effect_needs_enemy_target(effect)
 

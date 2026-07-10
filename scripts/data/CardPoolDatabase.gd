@@ -7,61 +7,13 @@ const COMMON_PACK_PREFIX := "common"
 const CARD_PACK_SLOT_COUNT := 5
 
 const CARD_UNLOCK_PACKS := {
-	"火球符": ["common_1"],
-	"金刃符": ["common_1"],
-	"回春符": ["common_1"],
-	"小还丹": ["common_1"],
-	"固元符": ["common_1"],
-	"血墨符": ["common_1"],
-	"换气符": ["common_1"],
-	"破甲符": ["common_1"],
-	"护身符": ["common_1"],
-	"幻象术": ["common_1"],
-	"青锋剑": ["common_1"],
-	"铁木甲": ["common_1"],
-	"雷击符": ["common_2"],
-	"裂石符": ["common_2"],
-	"甘露符": ["common_2"],
-	"引路符": ["common_2"],
-	"清囊术": ["common_2"],
-	"封存秘卷": ["common_2"],
-	"缚身符": ["common_2"],
-	"折光符": ["common_2"],
-	"护阵符": ["common_2"],
-	"反震符": ["common_2"],
-	"破法符": ["common_2"],
-	"护心符": ["common_2"],
-	"封藏符": ["common_2"],
-	"凝神香": ["common_2"],
-	"护法灯": ["common_2"],
-	"锁妖符": ["common_2"],
-	"木偶侍": ["common_2"],
-	"纸甲兵": ["common_2"],
-	"炽火符": ["common_3"],
-	"天雷符": ["common_3"],
-	"灭灵符": ["common_3"],
-	"玉露丹": ["common_3"],
-	"攻击无效符": ["common_3"],
-	"替身纸人": ["common_3"],
-	"落雷阵": ["common_3"],
-	"伏雷符": ["common_3"],
-	"玄铁剑": ["common_3"],
-	"护心镜": ["common_3"],
-	"起剑诀": ["sword_1"],
-	"引剑入体": ["sword_1"],
-	"藏锋": ["sword_1"],
-	"疾剑诀": ["sword_1"],
-	"养剑匣": ["sword_2"],
-	"剑气横扫": ["sword_2"],
-	"召剑诀": ["sword_2"],
-	"万剑回风": ["sword_3"],
-	"小无相剑": ["sword_3"],
-	"万剑诀": ["sword_3"],
-	"一剑开天": ["sword_3"],
-	"拾符诀": ["talisman_1"],
-	"复符诀": ["talisman_2"],
-	"灵墨重描": ["talisman_2"],
-	"符匣": ["talisman_2"]
+	"break_defense_setup": ["common_1", "sword_1"],
+	"weaken_attack_setup": ["common_1", "sword_1"],
+	"heal_wound": ["common_1", "talisman_1"],
+	"clear_buff": ["common_1", "talisman_1"],
+	"poison": ["common_1"],
+	"defense_setup": ["common_1", "talisman_1"],
+	"quick_draw": ["common_1"]
 }
 
 
@@ -74,11 +26,12 @@ static func card_unlock_tier(card_id: String) -> int:
 
 static func card_unlock_pack(card_id: String) -> String:
 	var packs: Array = card_unlock_packs(card_id)
-	return "common_1" if packs.is_empty() else str(packs[0])
+	return "" if packs.is_empty() else str(packs[0])
 
 
 static func card_unlock_packs(card_id: String) -> Array:
-	var packs: Array = CARD_UNLOCK_PACKS.get(card_id, [])
+	var normalized_id := CardDefinitionDatabaseScript.normalize_card_id(card_id)
+	var packs: Array = CARD_UNLOCK_PACKS.get(normalized_id, [])
 	return packs.duplicate()
 
 
@@ -143,12 +96,13 @@ static func pack_display_name(pack_id: String) -> String:
 
 
 static func shop_price(card_id: String) -> int:
-	var card := CardDefinitionDatabaseScript.get_card(card_id)
+	var normalized_id := CardDefinitionDatabaseScript.normalize_card_id(card_id)
+	var card := CardDefinitionDatabaseScript.get_card(normalized_id)
 	if card.is_empty():
 		return 0
 	if card.has("shop_price"):
 		return int(card.get("shop_price", 0))
-	return 12 + CardDefinitionDatabaseScript.card_score(card_id) * 8
+	return 12 + CardDefinitionDatabaseScript.card_score(normalized_id) * 8
 
 
 static func sell_price(card_id: String) -> int:
@@ -159,25 +113,30 @@ static func sell_price(card_id: String) -> int:
 
 
 static func common_pool() -> Array:
-	return [
-		"火球符", "金刃符", "雷击符", "裂石符", "炽火符", "天雷符", "灭灵符",
-		"回春符", "小还丹", "甘露符", "玉露丹", "固元符",
-		"血墨符", "换气符", "引路符", "清囊术", "封存秘卷",
-		"破甲符", "缚身符",
-		"护身符", "攻击无效符", "折光符", "护阵符", "反震符", "替身纸人", "破法符", "护心符", "落雷阵",
-		"封藏符", "凝神香", "护法灯", "伏雷符", "锁妖符",
-		"幻象术", "木偶侍", "纸甲兵",
-		"青锋剑", "铁木甲", "玄铁剑", "护心镜"
-	]
+	return _active_only(["break_defense_setup", "weaken_attack_setup", "heal_wound", "clear_buff", "poison", "defense_setup", "quick_draw"])
 
 
 static func job_pool(job_id: String) -> Array:
 	match job_id:
 		"sword":
-			return ["起剑诀", "引剑入体", "养剑匣", "疾剑诀", "剑气横扫", "藏锋", "万剑回风", "小无相剑", "召剑诀", "万剑诀", "一剑开天"]
+			return _active_only(["break_defense_setup", "weaken_attack_setup"])
 		"talisman":
-			return ["拾符诀", "复符诀", "灵墨重描", "符匣"]
+			return _active_only(["heal_wound", "clear_buff", "defense_setup"])
 	return []
+
+
+static func active_card_ids() -> Array:
+	return CardDefinitionDatabaseScript.active_card_ids()
+
+
+static func legacy_card_ids() -> Array:
+	var active: Array = active_card_ids()
+	var result: Array = []
+	for card_id_variant in CardDefinitionDatabaseScript.get_cards().keys():
+		var card_id := str(card_id_variant)
+		if not active.has(card_id) and not CardDefinitionDatabaseScript.is_active_card_id(card_id):
+			result.append(card_id)
+	return result
 
 
 static func reward_pool_for_job(job_id: String, encounter_type := "normal", unlock_tier := 0, unlocked_packs: Array = []) -> Array:
@@ -218,6 +177,7 @@ static func shop_stock(job_id: String, realm_index: int, rng, count := 6, unlock
 		var card_id := random_reward_card(job_id, rng, 0, max_cost, unlock_tier, unlocked_packs)
 		if card_id == "":
 			break
+		card_id = CardDefinitionDatabaseScript.normalize_card_id(card_id)
 		var duplicate := false
 		for item in stock:
 			if str((item as Dictionary).get("card_id", "")) == card_id:
@@ -241,7 +201,7 @@ static func _filter_reward_pool_by_encounter(pool: Array, encounter_type: String
 			min_cost = 3
 			max_cost = 99
 	for card_id_variant in pool:
-		var card_id := str(card_id_variant)
+		var card_id := CardDefinitionDatabaseScript.normalize_card_id(str(card_id_variant))
 		var cost := CardDefinitionDatabaseScript.card_score(card_id)
 		if cost >= min_cost and cost <= max_cost:
 			result.append(card_id)
@@ -263,7 +223,7 @@ static func _filter_reward_pool_by_encounter(pool: Array, encounter_type: String
 static func _filter_pool_by_cost(pool: Array, min_cost: int, max_cost: int) -> Array:
 	var result: Array = []
 	for card_id_variant in pool:
-		var card_id := str(card_id_variant)
+		var card_id := CardDefinitionDatabaseScript.normalize_card_id(str(card_id_variant))
 		var cost := CardDefinitionDatabaseScript.card_score(card_id)
 		if cost >= min_cost and cost <= max_cost:
 			result.append(card_id)
@@ -274,7 +234,7 @@ static func _filter_pool_by_unlock(pool: Array, job_id: String, unlock_tier: int
 	var result: Array = []
 	var packs: Array = unlocked_packs.duplicate() if not unlocked_packs.is_empty() else unlocked_packs_for_job(job_id, unlock_tier)
 	for card_id_variant in pool:
-		var card_id := str(card_id_variant)
+		var card_id := CardDefinitionDatabaseScript.normalize_card_id(str(card_id_variant))
 		if card_unlocked_for_job(card_id, job_id, unlock_tier, packs):
 			result.append(card_id)
 	return result
@@ -302,6 +262,15 @@ static func _deduplicate_strings(values: Array) -> Array:
 		var text := str(value)
 		if text != "" and not result.has(text):
 			result.append(text)
+	return result
+
+
+static func _active_only(values: Array) -> Array:
+	var result: Array = []
+	for value_variant in values:
+		var card_id := str(value_variant)
+		if CardDefinitionDatabaseScript.is_active_card_id(card_id):
+			result.append(card_id)
 	return result
 
 

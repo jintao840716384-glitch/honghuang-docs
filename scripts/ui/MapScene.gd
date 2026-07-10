@@ -4,11 +4,14 @@ signal battle_node_selected(node_data: Dictionary)
 
 const AudioManagerScript = preload("res://scripts/audio/AudioManager.gd")
 const CardDatabaseScript = preload("res://scripts/data/CardDatabase.gd")
+const EventDatabaseScript = preload("res://scripts/data/EventDatabase.gd")
 const DeckBuildRulesScript = preload("res://scripts/run/DeckBuildRules.gd")
 const UIStyleFactoryScript = preload("res://scripts/ui/UIStyleFactory.gd")
 const DeckBuilderViewFactoryScript = preload("res://scripts/ui/DeckBuilderViewFactory.gd")
 const MapModalChoiceFactoryScript = preload("res://scripts/ui/MapModalChoiceFactory.gd")
-const CardButtonScene = preload("res://scenes/CardButton.tscn")
+const RunViewModelScript = preload("res://scripts/run/RunViewModel.gd")
+const CardButtonScene = preload("res://scenes/ui/CardButton.tscn")
+const LocalizationServiceScript = preload("res://scripts/localization/LocalizationService.gd")
 
 var run_state
 var audio_manager: Node
@@ -63,7 +66,7 @@ func _ready() -> void:
 		call_deferred("_render_map")
 
 func setup(state) -> void:
-	run_state = state
+	run_state = RunViewModelScript.new(state)
 	if is_inside_tree():
 		call_deferred("_render_map")
 
@@ -87,7 +90,7 @@ func _build_scene() -> void:
 	add_child(header)
 
 	title_label = Label.new()
-	title_label.text = "探索地图"
+	title_label.text = _text("map.title", {}, "探索地图")
 	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title_label.add_theme_font_size_override("font_size", 24)
@@ -153,7 +156,7 @@ func _build_status_panel() -> void:
 	panel.add_child(layout)
 
 	var title := Label.new()
-	title.text = "修行状态"
+	title.text = _text("map.status.title", {}, "修行状态")
 	title.add_theme_font_size_override("font_size", 20)
 	title.add_theme_color_override("font_color", Color(0.96, 0.91, 0.76, 1.0))
 	layout.add_child(title)
@@ -178,7 +181,7 @@ func _build_status_panel() -> void:
 	layout.add_child(bonus_label)
 
 	deck_view_button = Button.new()
-	deck_view_button.text = "调整卡组"
+	deck_view_button.text = _text("map.deck.open", {}, "调整卡组")
 	deck_view_button.custom_minimum_size = Vector2(0.0, 38.0)
 	deck_view_button.focus_mode = Control.FOCUS_NONE
 	deck_view_button.pressed.connect(_on_deck_builder_pressed)
@@ -197,21 +200,16 @@ func _render_map() -> void:
 	node_positions.clear()
 
 	var max_floor: int = _max_floor()
-	title_label.text = "探索地图  /  第 %d / %d 层  /  %s  /  %s" % [
-		run_state.current_story_layer_number(),
-		run_state.main_story_layer_count(),
-		run_state.job_name,
-		run_state.realm_name()
-	]
-	deck_label.text = "节点排数 %d" % (max_floor + 1)
+	title_label.text = _text("map.title.progress", {"current": run_state.current_story_layer_number(), "total": run_state.main_story_layer_count(), "job": run_state.job_name, "realm": run_state.realm_name()}, "探索地图  /  第 {current} / {total} 层  /  {job}  /  {realm}")
+	deck_label.text = _text("map.floor_count", {"count": max_floor + 1}, "节点排数 {count}")
 	_refresh_status_panel()
-	status_label.text = "选择一个发亮节点继续探索"
+	status_label.text = _text("map.status.choose_node", {}, "选择一个发亮节点继续探索。")
 	if str(run_state.status_message) != "":
 		status_label.text = str(run_state.status_message)
 	if run_state.campaign_complete:
-		status_label.text = "本轮探索完成"
+		status_label.text = _text("map.status.run_complete", {}, "本轮探索完成")
 	elif run_state.is_complete():
-		status_label.text = "本层探索完成"
+		status_label.text = _text("map.status.layer_complete", {}, "本层探索完成")
 
 	var lane_spacing: float = min(240.0, map_area.size.x / 5.4)
 	for node in run_state.map_nodes:
@@ -250,7 +248,7 @@ func _create_node_buttons() -> void:
 		button.size = button.custom_minimum_size
 		var position: Vector2 = node_positions.get(id, Vector2.ZERO)
 		button.position = Vector2(position.x - button.size.x * 0.5, position.y - button.size.y * 0.5)
-		button.text = "已胜" if completed else str(node.get("title", "战斗"))
+		button.text = _text("map.node.completed", {}, "已胜") if completed else str(node.get("title", _text("map.node.normal", {}, "战斗")))
 		button.disabled = not available
 		button.focus_mode = Control.FOCUS_NONE
 		button.add_theme_font_size_override("font_size", 15)
@@ -332,15 +330,15 @@ func _play_audio(event_name: String) -> void:
 func _refresh_status_panel() -> void:
 	if run_state == null:
 		return
-	player_name_label.text = "名称：%s" % run_state.player_name
-	job_label.text = "角色：%s" % run_state.job_name
-	realm_label.text = "称号：%s" % run_state.realm_name()
-	hp_label.text = "生命：%d / %d" % [run_state.current_hp, run_state.max_hp]
-	draw_label.text = "基础抽牌：%d" % run_state.draw_per_turn
-	spirit_stone_label.text = "灵石：%d" % run_state.spirit_stones
-	cultivation_label.text = "本轮修为：%d" % run_state.run_cultivation_base
-	deck_score_label.text = "卡组总分：%d / %d" % [run_state.current_deck_score(), run_state.deck_score_limit]
-	bonus_label.text = "加成：%s" % run_state.realm_bonus_summary()
+	player_name_label.text = _text("map.status.name", {"name": run_state.player_name}, "名称：{name}")
+	job_label.text = _text("map.status.job", {"job": run_state.job_name}, "角色：{job}")
+	realm_label.text = _text("map.status.realm", {"realm": run_state.realm_name()}, "称号：{realm}")
+	hp_label.text = _text("map.status.hp", {"current": run_state.current_hp, "max": run_state.max_hp}, "生命：{current} / {max}")
+	draw_label.text = _text("map.status.draw", {"draw": run_state.draw_per_turn}, "基础抽牌：{draw}")
+	spirit_stone_label.text = _text("map.status.stones", {"stones": run_state.spirit_stones}, "灵石：{stones}")
+	cultivation_label.text = _text("map.status.cultivation", {"value": run_state.run_cultivation_base}, "本轮修为：{value}")
+	deck_score_label.text = _text("map.status.deck_score", {"score": run_state.current_deck_score(), "limit": run_state.deck_score_limit}, "卡组总分：{score} / {limit}")
+	bonus_label.text = _text("map.status.bonus", {"bonus": run_state.realm_bonus_summary()}, "加成：{bonus}")
 
 func _make_status_label(multiline := false) -> Label:
 	var label := Label.new()
@@ -401,125 +399,131 @@ func _create_map_modal() -> void:
 
 func _open_event_node(node: Dictionary) -> void:
 	active_map_node_id = str(node.get("id", ""))
-	match run_state.roll_event_kind():
-		"windfall":
-			_open_windfall_event()
-		"trade":
-			_open_trade_event()
-		_:
-			_open_minor_event()
+	_open_event_by_id(run_state.roll_event_id())
+
+func _open_event_by_id(event_id: String) -> bool:
+	if event_id == EventDatabaseScript.EVENT_ID_WINDFALL:
+		_open_windfall_event()
+		return true
+	if event_id == EventDatabaseScript.EVENT_ID_TRADE:
+		_open_trade_event()
+		return true
+	if event_id == EventDatabaseScript.EVENT_ID_MINOR:
+		_open_minor_event()
+		return true
+	return false
 
 func _open_minor_event() -> void:
-	_open_map_modal("山间机缘", "不经战斗的小收获。", true, Vector2(600.0, 500.0))
+	_open_map_modal(_text("map.event.minor.title", {}, "山间机缘"), _text("map.event.minor.body", {}, "不经战斗的小收获。"), true, Vector2(600.0, 500.0))
 	var offer: Dictionary = run_state.minor_event_offer()
 	if str(offer.get("kind", "")) == "stone":
 		var amount: int = int(offer.get("amount", 0))
-		_add_modal_reward_choice("灵石", "灵石", "", "机缘", func() -> void:
+		_add_modal_reward_choice(_text("common.spirit_stones", {}, "灵石"), _text("common.spirit_stones", {}, "灵石"), "", _text("map.event.minor.prefix", {}, "机缘"), func() -> void:
 			var result: Dictionary = run_state.apply_event_stone_reward(amount, "事件：获得 %d 灵石。")
-			_complete_map_node(str(result.get("message", "事件完成。")))
-		, false, "收下", str(amount))
+			_complete_map_node(str(result.get("message", _text("map.event.complete", {}, "事件完成。"))))
+		, false, _text("common.accept", {}, "收下"), str(amount))
 	else:
 		var card_id: String = str(offer.get("card_id", ""))
-		_add_modal_card_choice(map_modal_options_container, card_id, "机缘", func(selected_card_id: String) -> void:
+		_add_modal_card_choice(map_modal_options_container, card_id, _text("map.event.minor.prefix", {}, "机缘"), func(selected_card_id: String) -> void:
 			var result: Dictionary = run_state.apply_event_card_reward(selected_card_id, "事件")
-			_complete_map_node(str(result.get("message", "事件完成。")))
-		, false, "收下")
+			_complete_map_node(str(result.get("message", _text("map.event.complete", {}, "事件完成。"))))
+		, false, _text("common.accept", {}, "收下"))
 
 func _open_windfall_event() -> void:
-	_open_map_modal("罕见机缘", "极低概率出现的高收益事件。", true, Vector2(600.0, 500.0))
+	_open_map_modal(_text("map.event.windfall.title", {}, "罕见机缘"), _text("map.event.windfall.body", {}, "极低概率出现的高收益事件。"), true, Vector2(600.0, 500.0))
 	var offer: Dictionary = run_state.windfall_event_offer()
 	if str(offer.get("kind", "")) == "stone":
 		var amount: int = int(offer.get("amount", 0))
-		_add_modal_reward_choice("灵石", "灵石", "", "奇遇", func() -> void:
+		_add_modal_reward_choice(_text("common.spirit_stones", {}, "灵石"), _text("common.spirit_stones", {}, "灵石"), "", _text("map.event.windfall.prefix", {}, "奇遇"), func() -> void:
 			var result: Dictionary = run_state.apply_event_stone_reward(amount, "罕见机缘：获得 %d 灵石。")
-			_complete_map_node(str(result.get("message", "罕见机缘完成。")))
-		, false, "收下", str(amount))
+			_complete_map_node(str(result.get("message", _text("map.event.windfall.complete", {}, "罕见机缘完成。"))))
+		, false, _text("common.accept", {}, "收下"), str(amount))
 		return
 	var card_id: String = str(offer.get("card_id", ""))
-	_add_modal_card_choice(map_modal_options_container, card_id, "奇遇", func(selected_card_id: String) -> void:
+	_add_modal_card_choice(map_modal_options_container, card_id, _text("map.event.windfall.prefix", {}, "奇遇"), func(selected_card_id: String) -> void:
 		var result: Dictionary = run_state.apply_event_card_reward(selected_card_id, "罕见机缘")
-		_complete_map_node(str(result.get("message", "罕见机缘完成。")))
-	, false, "收下")
+		_complete_map_node(str(result.get("message", _text("map.event.windfall.complete", {}, "罕见机缘完成。"))))
+	, false, _text("common.accept", {}, "收下"))
 
 func _open_trade_event() -> void:
-	_open_map_modal("试炼交易", "可以付出代价换取更高收益；不付代价也能拿到保底。", true, Vector2(820.0, 560.0))
+	_open_map_modal(_text("map.event.trade.title", {}, "试炼交易"), _text("map.event.trade.body", {}, "可以付出代价换取更高收益；不付代价也能拿到保底。"), true, Vector2(820.0, 560.0))
 	var grid := _make_modal_card_grid(3)
 	var offer: Dictionary = run_state.trade_event_offer()
 	var stone_option: Dictionary = (offer.get("stone_option", {}) as Dictionary)
 	var stone_cost: int = int(stone_option.get("cost", 0))
 	var stone_card: String = str(stone_option.get("card_id", ""))
-	_add_modal_card_choice(grid, stone_card, "交易", func(selected_card_id: String) -> void:
+	_add_modal_card_choice(grid, stone_card, _text("map.event.trade.prefix", {}, "交易"), func(selected_card_id: String) -> void:
 		var result: Dictionary = run_state.apply_trade_stone_reward(stone_cost, selected_card_id)
 		if not bool(result.get("success", false)):
 			_open_trade_event()
-			map_modal_body_label.text = str(result.get("message", "灵石不足。可以选择其他代价，或领取保底。"))
+			map_modal_body_label.text = str(result.get("message", _text("map.event.trade.stones_insufficient", {}, "灵石不足。可以选择其他代价，或领取保底。")))
 			return
-		_complete_map_node(str(result.get("message", "试炼交易完成。")))
-	, run_state.spirit_stones < stone_cost, "支付 %d 灵石" % stone_cost)
+		_complete_map_node(str(result.get("message", _text("map.event.trade.complete", {}, "试炼交易完成。"))))
+	, run_state.spirit_stones < stone_cost, _text("map.event.trade.pay_stones", {"cost": stone_cost}, "支付 {cost} 灵石"))
 
 	var hp_option: Dictionary = (offer.get("hp_option", {}) as Dictionary)
 	var hp_cost: int = int(hp_option.get("cost", 0))
 	var hp_card: String = str(hp_option.get("card_id", ""))
-	_add_modal_card_choice(grid, hp_card, "交易", func(selected_card_id: String) -> void:
+	_add_modal_card_choice(grid, hp_card, _text("map.event.trade.prefix", {}, "交易"), func(selected_card_id: String) -> void:
 		var result: Dictionary = run_state.apply_trade_hp_reward(hp_cost, selected_card_id)
 		if not bool(result.get("success", false)):
 			_open_trade_event()
-			map_modal_body_label.text = str(result.get("message", "生命不足，无法支付该代价。"))
+			map_modal_body_label.text = str(result.get("message", _text("map.event.trade.hp_insufficient", {}, "生命不足，无法支付该代价。")))
 			return
-		_complete_map_node(str(result.get("message", "试炼交易完成。")))
-	, hp_cost <= 0, "支付 %d 生命" % hp_cost)
+		_complete_map_node(str(result.get("message", _text("map.event.trade.complete", {}, "试炼交易完成。"))))
+	, hp_cost <= 0, _text("map.event.trade.pay_hp", {"cost": hp_cost}, "支付 {cost} 生命"))
 
 	var exchange_option: Dictionary = (offer.get("exchange_option", {}) as Dictionary)
 	if not exchange_option.is_empty():
 		var reserve_index: int = int(exchange_option.get("reserve_index", -1))
 		var offered_id: String = str(exchange_option.get("offered_id", ""))
 		var exchange_card: String = str(exchange_option.get("card_id", ""))
-		_add_modal_card_choice(grid, exchange_card, "交易", func(selected_card_id: String) -> void:
+		_add_modal_card_choice(grid, exchange_card, _text("map.event.trade.prefix", {}, "交易"), func(selected_card_id: String) -> void:
 			var result: Dictionary = run_state.apply_trade_reserve_reward(reserve_index, offered_id, selected_card_id)
 			if not bool(result.get("success", false)):
 				_open_trade_event()
-				map_modal_body_label.text = str(result.get("message", "交易目标已变化，请重新选择。"))
+				map_modal_body_label.text = str(result.get("message", _text("map.event.trade.target_changed", {}, "交易目标已变化，请重新选择。")))
 				return
-			_complete_map_node(str(result.get("message", "试炼交易完成。")))
-		, false, "交出 %s" % offered_id)
+			_complete_map_node(str(result.get("message", _text("map.event.trade.complete", {}, "试炼交易完成。"))))
+		, false, _text("map.event.trade.exchange", {"card": offered_id}, "交出 {card}"))
 
 	var fallback_option: Dictionary = (offer.get("fallback_option", {}) as Dictionary)
 	var fallback_amount: int = int(fallback_option.get("amount", 0))
-	_add_modal_reward_choice_to(grid, "灵石", "灵石", "", "交易", func() -> void:
+	_add_modal_reward_choice_to(grid, _text("common.spirit_stones", {}, "灵石"), _text("common.spirit_stones", {}, "灵石"), "", _text("map.event.trade.prefix", {}, "交易"), func() -> void:
 		var result: Dictionary = run_state.apply_event_stone_reward(fallback_amount, "事件：领取保底 %d 灵石。")
-		_complete_map_node(str(result.get("message", "事件完成。")))
-	, false, "无代价取得", str(fallback_amount))
+		_complete_map_node(str(result.get("message", _text("map.event.complete", {}, "事件完成。"))))
+	, false, _text("map.event.trade.free", {}, "无代价取得"), str(fallback_amount))
 
 func _open_treasure_node(node: Dictionary) -> void:
 	active_map_node_id = str(node.get("id", ""))
-	_open_map_modal("遗落宝箱", "选择一张卡带走；不想编入当前卡组时，可先进入备牌区，之后在坊市出售。", true, Vector2(820.0, 520.0))
+	_open_map_modal(_text("map.treasure.title", {}, "遗落宝箱"), _text("map.treasure.body", {}, "选择一张卡带走；不想编入当前卡组时，可先进入备牌区，之后在坊市出售。"), true, Vector2(820.0, 520.0))
 	var grid := _make_modal_card_grid(3)
-	for card_id_variant in run_state.treasure_card_rewards(3):
+	for card_id_variant in run_state.treasure_card_rewards():
 		var card_id := str(card_id_variant)
-		_add_modal_card_choice(grid, card_id, "宝箱", func(selected_card_id: String) -> void:
+		_add_modal_card_choice(grid, card_id, _text("map.treasure.prefix", {}, "宝箱"), func(selected_card_id: String) -> void:
 			var result: Dictionary = run_state.apply_treasure_card_reward(selected_card_id)
-			_complete_map_node(str(result.get("message", "宝箱完成。")))
+			_complete_map_node(str(result.get("message", _text("map.treasure.complete", {}, "宝箱完成。"))))
 		)
 
 func _open_shop_node(node: Dictionary) -> void:
 	active_map_node_id = str(node.get("id", ""))
 	current_shop_refresh_cost = run_state.shop_start_refresh_cost()
 	current_shop_stock = run_state.generate_shop_stock()
-	_refresh_shop_modal("坊市出售通用卡和当前角色卡池。")
+	_refresh_shop_modal(_text("map.shop.intro", {}, "坊市出售通用卡和当前角色卡池。"))
 
 func _refresh_shop_modal(message: String) -> void:
-	_open_map_modal("坊市", "%s\n当前灵石：%d" % [message, run_state.spirit_stones], false, Vector2(860.0, 760.0))
+	_open_map_modal(_text("map.shop.title", {}, "坊市"), _text("map.shop.body", {"message": message, "stones": run_state.spirit_stones}, "{message}\n当前灵石：{stones}"), false, Vector2(860.0, 760.0))
 	var action_row := HBoxContainer.new()
 	action_row.add_theme_constant_override("separation", 10)
 	map_modal_options_container.add_child(action_row)
-	action_row.add_child(_make_modal_button("刷新 %d 灵石" % current_shop_refresh_cost, func() -> void:
+	action_row.add_child(_make_modal_button(_text("map.shop.refresh", {"cost": current_shop_refresh_cost}, "刷新 {cost} 灵石"), func() -> void:
 		_refresh_shop_stock()
 	, run_state.spirit_stones < current_shop_refresh_cost))
-	action_row.add_child(_make_modal_button("出售备牌", func() -> void:
-		_open_shop_sell_view("选择备牌区中的卡出售。")
+	action_row.add_child(_make_modal_button(_text("map.shop.sell_reserve", {}, "出售备牌"), func() -> void:
+		_open_shop_sell_view(_text("map.shop.choose_sell", {}, "选择备牌区中的卡出售。"))
 	))
-	action_row.add_child(_make_modal_button("离开坊市", func() -> void:
-		_complete_map_node("离开坊市。")
+	action_row.add_child(_make_modal_button(_text("map.shop.leave", {}, "离开坊市"), func() -> void:
+		_complete_map_node(_text("map.shop.left", {}, "离开坊市。"))
 	))
 
 	var scroll := ScrollContainer.new()
@@ -537,7 +541,7 @@ func _refresh_shop_modal(message: String) -> void:
 
 	if current_shop_stock.is_empty():
 		var empty_label := Label.new()
-		empty_label.text = "货架已空。"
+		empty_label.text = _text("map.shop.empty", {}, "货架已空。")
 		empty_label.add_theme_color_override("font_color", Color(0.86, 0.90, 0.88, 1.0))
 		grid.add_child(empty_label)
 		return
@@ -558,22 +562,22 @@ func _refresh_shop_modal(message: String) -> void:
 		card_button.ownership_text = _card_ownership_text(card_id)
 		card_button.hover_details_enabled = false
 		card_button.hover_motion_enabled = false
-		card_button.setup(card, "坊市")
+		card_button.setup(card, _text("map.shop.prefix", {}, "坊市"))
 		card_button.disabled = run_state.spirit_stones < price
 		card_button.card_pressed.connect(_on_shop_card_pressed.bind(item_index))
 		slot.add_child(card_button)
-		slot.add_child(_make_modal_button("购买 %d 灵石" % price, func() -> void:
+		slot.add_child(_make_modal_button(_text("map.shop.buy", {"price": price}, "购买 {price} 灵石"), func() -> void:
 			_buy_shop_item(item_index)
 		, run_state.spirit_stones < price))
 
 func _refresh_shop_stock() -> void:
 	var result: Dictionary = run_state.refresh_shop_stock(current_shop_refresh_cost)
 	if not bool(result.get("success", false)):
-		_refresh_shop_modal(str(result.get("message", "灵石不足，无法刷新。")))
+		_refresh_shop_modal(str(result.get("message", _text("map.shop.refresh_insufficient", {}, "灵石不足，无法刷新。"))))
 		return
 	current_shop_refresh_cost = int(result.get("next_refresh_cost", current_shop_refresh_cost))
 	current_shop_stock = (result.get("stock", []) as Array).duplicate(true)
-	_refresh_shop_modal(str(result.get("message", "货架已刷新。")))
+	_refresh_shop_modal(str(result.get("message", _text("map.shop.refreshed", {}, "货架已刷新。"))))
 
 func _on_shop_card_pressed(_uid: String, index: int) -> void:
 	_buy_shop_item(index)
@@ -586,21 +590,21 @@ func _buy_shop_item(index: int) -> void:
 	var price: int = int(item.get("price", 0))
 	var result: Dictionary = run_state.buy_shop_card(card_id, price)
 	if not bool(result.get("success", false)):
-		_refresh_shop_modal(str(result.get("message", "灵石不足，无法购买。")))
+		_refresh_shop_modal(str(result.get("message", _text("map.shop.buy_insufficient", {}, "灵石不足，无法购买。"))))
 		return
 	current_shop_stock.remove_at(index)
-	_refresh_shop_modal(str(result.get("message", "购买完成。")))
+	_refresh_shop_modal(str(result.get("message", _text("map.shop.bought", {}, "购买完成。"))))
 
 func _open_shop_sell_view(message: String) -> void:
-	_open_map_modal("坊市 - 出售", "%s\n当前灵石：%d\n当前只出售备牌区，不影响当前战斗卡组。" % [message, run_state.spirit_stones], false, Vector2(860.0, 760.0))
+	_open_map_modal(_text("map.shop.sell_title", {}, "坊市 - 出售"), _text("map.shop.sell_body", {"message": message, "stones": run_state.spirit_stones}, "{message}\n当前灵石：{stones}\n当前只出售备牌区，不影响当前战斗卡组。"), false, Vector2(860.0, 760.0))
 	var action_row := HBoxContainer.new()
 	action_row.add_theme_constant_override("separation", 10)
 	map_modal_options_container.add_child(action_row)
-	action_row.add_child(_make_modal_button("返回购买", func() -> void:
-		_refresh_shop_modal("继续选购。")
+	action_row.add_child(_make_modal_button(_text("map.shop.back_buy", {}, "返回购买"), func() -> void:
+		_refresh_shop_modal(_text("map.shop.continue", {}, "继续选购。"))
 	))
-	action_row.add_child(_make_modal_button("离开坊市", func() -> void:
-		_complete_map_node("离开坊市。")
+	action_row.add_child(_make_modal_button(_text("map.shop.leave", {}, "离开坊市"), func() -> void:
+		_complete_map_node(_text("map.shop.left", {}, "离开坊市。"))
 	))
 
 	var scroll := ScrollContainer.new()
@@ -618,7 +622,7 @@ func _open_shop_sell_view(message: String) -> void:
 
 	if run_state.reserve_ids.is_empty():
 		var empty_label := Label.new()
-		empty_label.text = "备牌区没有可出售的卡。"
+		empty_label.text = _text("map.shop.no_sell_cards", {}, "备牌区没有可出售的卡。")
 		empty_label.add_theme_color_override("font_color", Color(0.86, 0.90, 0.88, 1.0))
 		grid.add_child(empty_label)
 		return
@@ -638,10 +642,10 @@ func _open_shop_sell_view(message: String) -> void:
 		card_button.ownership_text = _card_ownership_text(card_id)
 		card_button.hover_details_enabled = false
 		card_button.hover_motion_enabled = false
-		card_button.setup(card, "出售")
+		card_button.setup(card, _text("map.shop.sell_prefix", {}, "出售"))
 		card_button.card_pressed.connect(_on_sell_card_pressed.bind(reserve_index))
 		slot.add_child(card_button)
-		slot.add_child(_make_modal_button("出售 %d 灵石" % price, func() -> void:
+		slot.add_child(_make_modal_button(_text("map.shop.sell", {"price": price}, "出售 {price} 灵石"), func() -> void:
 			_sell_reserve_card(reserve_index)
 		))
 
@@ -651,12 +655,12 @@ func _on_sell_card_pressed(_uid: String, index: int) -> void:
 func _sell_reserve_card(index: int) -> void:
 	var result: Dictionary = run_state.sell_reserve_card(index)
 	if not bool(result.get("success", false)):
-		_open_shop_sell_view(str(result.get("message", "无法出售。")))
+		_open_shop_sell_view(str(result.get("message", _text("map.shop.sell_failed", {}, "无法出售。"))))
 		return
-	_open_shop_sell_view(str(result.get("message", "出售完成。")))
+	_open_shop_sell_view(str(result.get("message", _text("map.shop.sold", {}, "出售完成。"))))
 
 func _card_ownership_text(card_id: String) -> String:
-	return "已有：卡组 %d  ·  备牌 %d" % [_card_count_in(run_state.deck_ids, card_id), _card_count_in(run_state.reserve_ids, card_id)]
+	return _text("map.shop.owned", {"deck": _card_count_in(run_state.deck_ids, card_id), "reserve": _card_count_in(run_state.reserve_ids, card_id)}, "已有：卡组 {deck}  ·  备牌 {reserve}")
 
 func _card_count_in(card_ids: Array, card_id: String) -> int:
 	var result := 0
@@ -667,11 +671,11 @@ func _card_count_in(card_ids: Array, card_id: String) -> int:
 
 func _open_rest_node(node: Dictionary) -> void:
 	active_map_node_id = str(node.get("id", ""))
-	_open_map_modal("休息", "调息恢复全部生命。", true, Vector2(520.0, 500.0))
-	_add_modal_reward_choice("调息", "休息", "恢复全部生命。", "休息", func() -> void:
+	_open_map_modal(_text("map.rest.title", {}, "休息"), _text("map.rest.body", {}, "调息恢复全部生命。"), true, Vector2(520.0, 500.0))
+	_add_modal_reward_choice(_text("map.rest.action", {}, "调息"), _text("map.rest.title", {}, "休息"), _text("map.rest.restore", {}, "恢复全部生命。"), _text("map.rest.title", {}, "休息"), func() -> void:
 		var result: Dictionary = run_state.apply_rest()
-		_complete_map_node(str(result.get("message", "休息：生命已恢复。")))
-	, false, "休息")
+		_complete_map_node(str(result.get("message", _text("map.rest.complete", {}, "休息：生命已恢复。"))))
+	, false, _text("map.rest.title", {}, "休息"))
 
 func _open_map_modal(title: String, body: String, caption_below := false, panel_size := Vector2(600.0, 500.0)) -> void:
 	map_modal_overlay.visible = true
@@ -696,17 +700,17 @@ func _set_map_modal_size(panel_size: Vector2) -> void:
 func _make_modal_card_grid(columns := 3) -> GridContainer:
 	return MapModalChoiceFactoryScript.create_card_grid(map_modal_options_container, columns)
 
-func _add_modal_card_choice(parent: Control, card_id: String, prefix: String, callback: Callable, disabled := false, action_text := "选择此卡") -> void:
-	MapModalChoiceFactoryScript.add_card_choice(parent, card_id, prefix, callback, disabled, action_text)
+func _add_modal_card_choice(parent: Control, card_id: String, prefix: String, callback: Callable, disabled := false, action_text := "") -> void:
+	MapModalChoiceFactoryScript.add_card_choice(parent, card_id, prefix, callback, disabled, _text("common.choose_card", {}, "选择此卡") if action_text == "" else action_text)
 
-func _add_modal_card_data_choice(parent: Control, card: Dictionary, prefix: String, callback: Callable, disabled := false, action_text := "选择此卡", show_score := true) -> void:
-	MapModalChoiceFactoryScript.add_card_data_choice(parent, card, prefix, callback, disabled, action_text, show_score)
+func _add_modal_card_data_choice(parent: Control, card: Dictionary, prefix: String, callback: Callable, disabled := false, action_text := "", show_score := true) -> void:
+	MapModalChoiceFactoryScript.add_card_data_choice(parent, card, prefix, callback, disabled, _text("common.choose_card", {}, "选择此卡") if action_text == "" else action_text, show_score)
 
-func _add_modal_reward_choice(title: String, category: String, description: String, prefix: String, callback: Callable, disabled := false, action_text := "收下", center_text := "") -> void:
-	_add_modal_reward_choice_to(map_modal_options_container, title, category, description, prefix, callback, disabled, action_text, center_text)
+func _add_modal_reward_choice(title: String, category: String, description: String, prefix: String, callback: Callable, disabled := false, action_text := "", center_text := "") -> void:
+	_add_modal_reward_choice_to(map_modal_options_container, title, category, description, prefix, callback, disabled, _text("common.accept", {}, "收下") if action_text == "" else action_text, center_text)
 
-func _add_modal_reward_choice_to(parent: Control, title: String, category: String, description: String, prefix: String, callback: Callable, disabled := false, action_text := "收下", center_text := "") -> void:
-	MapModalChoiceFactoryScript.add_reward_choice(parent, title, category, description, prefix, callback, disabled, action_text, center_text)
+func _add_modal_reward_choice_to(parent: Control, title: String, category: String, description: String, prefix: String, callback: Callable, disabled := false, action_text := "", center_text := "") -> void:
+	MapModalChoiceFactoryScript.add_reward_choice(parent, title, category, description, prefix, callback, disabled, _text("common.accept", {}, "收下") if action_text == "" else action_text, center_text)
 
 func _add_modal_button(label_text: String, callback: Callable, disabled := false) -> void:
 	map_modal_options_container.add_child(_make_modal_button(label_text, callback, disabled))
@@ -717,7 +721,7 @@ func _make_modal_button(label_text: String, callback: Callable, disabled := fals
 func _complete_map_node(message: String) -> void:
 	if active_map_node_id != "":
 		run_state.complete_node(active_map_node_id)
-	run_state.status_message = message
+	run_state.set_status_message(message)
 	active_map_node_id = ""
 	map_modal_overlay.visible = false
 	_render_map()
@@ -752,7 +756,7 @@ func _create_deck_builder() -> void:
 	root_layout.add_child(header)
 
 	var title := Label.new()
-	title.text = "卡组调整"
+	title.text = _text("map.deck.title", {}, "卡组调整")
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.add_theme_font_size_override("font_size", 24)
 	title.add_theme_color_override("font_color", Color(0.96, 0.91, 0.76, 1.0))
@@ -766,14 +770,14 @@ func _create_deck_builder() -> void:
 	header.add_child(builder_summary_label)
 
 	builder_save_button = Button.new()
-	builder_save_button.text = "保存卡组"
+	builder_save_button.text = _text("map.deck.save", {}, "保存卡组")
 	builder_save_button.focus_mode = Control.FOCUS_NONE
 	builder_save_button.pressed.connect(_on_save_builder_pressed)
 	_style_button(builder_save_button, Color(0.14, 0.20, 0.12, 0.96), Color(0.52, 0.86, 0.48, 1.0))
 	header.add_child(builder_save_button)
 
 	builder_close_button = Button.new()
-	builder_close_button.text = "退出调整"
+	builder_close_button.text = _text("map.deck.close", {}, "退出调整")
 	builder_close_button.focus_mode = Control.FOCUS_NONE
 	builder_close_button.pressed.connect(_on_cancel_builder_pressed)
 	_style_button(builder_close_button, Color(0.10, 0.10, 0.11, 0.96), Color(0.54, 0.56, 0.62, 1.0))
@@ -790,12 +794,12 @@ func _create_deck_builder() -> void:
 	columns.add_theme_constant_override("separation", 14)
 	root_layout.add_child(columns)
 
-	var deck_column := _create_builder_column("当前卡组")
+	var deck_column := _create_builder_column(_text("map.deck.current", {}, "当前卡组"))
 	builder_deck_title_label = deck_column["title"] as Label
 	builder_deck_container = deck_column["container"] as GridContainer
 	columns.add_child(deck_column["panel"] as Control)
 
-	var reserve_column := _create_builder_column("备牌区")
+	var reserve_column := _create_builder_column(_text("map.deck.reserve", {}, "备牌区"))
 	builder_reserve_title_label = reserve_column["title"] as Label
 	builder_reserve_container = reserve_column["container"] as GridContainer
 	columns.add_child(reserve_column["panel"] as Control)
@@ -823,7 +827,7 @@ func _create_builder_confirm_panel() -> void:
 	builder_confirm_panel.add_child(layout)
 
 	var label := Label.new()
-	label.text = "当前卡组调整尚未保存，是否保存后退出？"
+	label.text = _text("map.deck.unsaved_prompt", {}, "当前卡组调整尚未保存，是否保存后退出？")
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.add_theme_font_size_override("font_size", 17)
 	label.add_theme_color_override("font_color", Color(0.96, 0.92, 0.78, 1.0))
@@ -835,14 +839,14 @@ func _create_builder_confirm_panel() -> void:
 	layout.add_child(buttons)
 
 	builder_confirm_save_button = Button.new()
-	builder_confirm_save_button.text = "保存并退出"
+	builder_confirm_save_button.text = _text("map.deck.save_exit", {}, "保存并退出")
 	builder_confirm_save_button.focus_mode = Control.FOCUS_NONE
 	builder_confirm_save_button.pressed.connect(_on_confirm_save_builder)
 	_style_button(builder_confirm_save_button, Color(0.14, 0.20, 0.12, 0.96), Color(0.52, 0.86, 0.48, 1.0))
 	buttons.add_child(builder_confirm_save_button)
 
 	builder_confirm_discard_button = Button.new()
-	builder_confirm_discard_button.text = "放弃退出"
+	builder_confirm_discard_button.text = _text("map.deck.discard_exit", {}, "放弃退出")
 	builder_confirm_discard_button.focus_mode = Control.FOCUS_NONE
 	builder_confirm_discard_button.pressed.connect(_discard_builder_and_close)
 	_style_button(builder_confirm_discard_button, Color(0.18, 0.10, 0.10, 0.96), Color(0.82, 0.46, 0.42, 1.0))
@@ -865,7 +869,7 @@ func _on_deck_builder_pressed() -> void:
 	builder_dirty = false
 	builder_confirm_panel.visible = false
 	deck_builder_overlay.visible = true
-	_refresh_deck_builder("点击当前卡组内的卡可移入备牌区；点击备牌区的卡可加入当前卡组。")
+	_refresh_deck_builder(_text("map.deck.instructions", {}, "点击当前卡组内的卡可移入备牌区；点击备牌区的卡可加入当前卡组。"))
 
 func _close_deck_builder(saved := false) -> void:
 	_play_audio("ui_click")
@@ -882,7 +886,7 @@ func _on_save_builder_pressed() -> void:
 		return
 	var reason: String = run_state.apply_deck_build(builder_deck_ids, builder_reserve_ids)
 	if reason != "":
-		_refresh_deck_builder("无法保存：%s" % reason)
+		_refresh_deck_builder(_text("map.deck.save_failed", {"reason": reason}, "无法保存：{reason}"))
 		return
 	builder_dirty = false
 	_close_deck_builder(true)
@@ -910,26 +914,20 @@ func _refresh_deck_builder(message := "") -> void:
 	_clear_children(builder_deck_container)
 	_clear_children(builder_reserve_container)
 	var score: int = DeckBuildRulesScript.deck_score(builder_deck_ids)
-	builder_summary_label.text = "卡组 %d/%d-%d  ·  卡组总分 %d/%d" % [
-		builder_deck_ids.size(),
-		DeckBuildRulesScript.min_deck_size(),
-		DeckBuildRulesScript.max_deck_size(),
-		score,
-		run_state.deck_score_limit
-	]
-	builder_deck_title_label.text = "当前卡组（%d）" % builder_deck_ids.size()
-	builder_reserve_title_label.text = "备牌区（%d）" % builder_reserve_ids.size()
+	builder_summary_label.text = _text("map.deck.summary", {"count": builder_deck_ids.size(), "min": DeckBuildRulesScript.min_deck_size(), "max": DeckBuildRulesScript.max_deck_size(), "score": score, "limit": run_state.deck_score_limit}, "卡组 {count}/{min}-{max}  ·  卡组总分 {score}/{limit}")
+	builder_deck_title_label.text = _text("map.deck.current_count", {"count": builder_deck_ids.size()}, "当前卡组（{count}）")
+	builder_reserve_title_label.text = _text("map.deck.reserve_count", {"count": builder_reserve_ids.size()}, "备牌区（{count}）")
 	builder_hint_label.text = _builder_hint_text(message)
 	for i in range(builder_deck_ids.size()):
-		_add_builder_card(builder_deck_container, str(builder_deck_ids[i]), "移出", "deck", i)
+		_add_builder_card(builder_deck_container, str(builder_deck_ids[i]), _text("deck.action.remove", {}, "移出"), "deck", i)
 	for i in range(builder_reserve_ids.size()):
-		_add_builder_card(builder_reserve_container, str(builder_reserve_ids[i]), "加入", "reserve", i)
+		_add_builder_card(builder_reserve_container, str(builder_reserve_ids[i]), _text("deck.action.add", {}, "加入"), "reserve", i)
 
 func _builder_hint_text(message: String) -> String:
 	var parts: Array = []
 	if message != "":
 		parts.append(message)
-	parts.append("保存卡组时会检查 %d-%d 张和分数上限；编辑过程中可以临时不满足。" % [DeckBuildRulesScript.min_deck_size(), DeckBuildRulesScript.max_deck_size()])
+	parts.append(_text("map.deck.hint", {"min": DeckBuildRulesScript.min_deck_size(), "max": DeckBuildRulesScript.max_deck_size()}, "保存卡组时会检查 {min}-{max} 张和分数上限；编辑过程中可以临时不满足。"))
 	return "  ".join(parts)
 
 func _add_builder_card(parent: GridContainer, card_id: String, prefix: String, source: String, index: int) -> void:
@@ -945,14 +943,17 @@ func _on_builder_card_pressed(_uid: String, source: String, index: int) -> void:
 			builder_deck_ids.remove_at(index)
 			builder_reserve_ids.append(card_id)
 			builder_dirty = true
-			_refresh_deck_builder("已移入备牌区。")
+			_refresh_deck_builder(_text("map.deck.moved_to_reserve", {}, "已移入备牌区。"))
 		return
 	if index >= 0 and index < builder_reserve_ids.size():
 		var card_id := str(builder_reserve_ids[index])
 		builder_reserve_ids.remove_at(index)
 		builder_deck_ids.append(card_id)
 		builder_dirty = true
-		_refresh_deck_builder("已加入当前卡组。")
+		_refresh_deck_builder(_text("map.deck.added", {}, "已加入当前卡组。"))
+
+func _text(text_id: String, params: Dictionary = {}, source_fallback := "") -> String:
+	return LocalizationServiceScript.text(text_id, "zh_cn", params, source_fallback)
 
 func _panel_style(bg: Color, border: Color, radius: int, border_width: int) -> StyleBoxFlat:
 	return UIStyleFactoryScript.panel_style(bg, border, radius, border_width, Vector4(10, 10, 8, 8))

@@ -3,11 +3,15 @@ class_name DeckManager
 
 const CardDatabaseScript = preload("res://scripts/data/CardDatabase.gd")
 
+const DEFAULT_HAND_LIMIT := 6
+
 var deck: Array = []
 var hand: Array = []
 var graveyard: Array = []
 var exile: Array = []
 var messages: Array = []
+var hand_limit: int = DEFAULT_HAND_LIMIT
+var reshuffle_pending: bool = false
 
 func setup_battle(deck_ids: Array) -> void:
 	deck.clear()
@@ -15,32 +19,42 @@ func setup_battle(deck_ids: Array) -> void:
 	graveyard.clear()
 	exile.clear()
 	messages.clear()
+	reshuffle_pending = false
 	for card_id in deck_ids:
 		deck.append(CardDatabaseScript.make_card(str(card_id)))
 	deck.shuffle()
 
 func draw(amount: int) -> Array:
 	var drawn: Array = []
-	for i in range(amount):
+	for i in range(max(0, amount)):
+		if hand.size() >= hand_limit:
+			messages.append("手牌已满，无法继续抽牌。")
+			break
 		if deck.is_empty():
-			_shuffle_graveyard_into_deck()
+			_mark_reshuffle_pending()
 		if deck.is_empty():
-			messages.append("卡组和墓地都为空，无法继续抽牌。")
+			messages.append("牌库为空，等待回合结束重整。")
 			break
 		var card: Dictionary = deck.pop_back()
 		hand.append(card)
 		drawn.append(card)
+		if deck.is_empty():
+			_mark_reshuffle_pending()
 	if drawn.size() > 0:
 		messages.append("抽到 %d 张牌。" % drawn.size())
 	return drawn
 
-func _shuffle_graveyard_into_deck() -> void:
+func process_pending_reshuffle() -> bool:
+	if not reshuffle_pending:
+		return false
+	reshuffle_pending = false
 	if graveyard.is_empty():
-		return
+		return false
 	deck = graveyard.duplicate(true)
 	graveyard.clear()
 	deck.shuffle()
-	messages.append("卡组抽空，墓地洗回卡组。")
+	messages.append("回合结束，墓地洗回牌库。")
+	return true
 
 func take_messages() -> Array:
 	var result := messages.duplicate()
@@ -111,3 +125,6 @@ func cards_in_deck_with_tag(tag: String) -> Array:
 		if tag in card.get("tags", []):
 			result.append(card)
 	return result
+
+func _mark_reshuffle_pending() -> void:
+	reshuffle_pending = true

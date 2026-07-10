@@ -5,9 +5,24 @@ const TYPE_SPELL := "spell"
 const TYPE_DEFENSE := "defense"
 const MIN_DECK_SIZE := 10
 const MAX_DECK_SIZE := 20
+const CONTENT_STATE_ACTIVE := "active"
+const CONTENT_STATE_PROTOTYPE := "prototype"
+const VALID_ACTIVE_TARGET_SCOPES := ["", "ally_unit", "enemy_unit"]
+const VALID_ACTIVE_AFTER_USE_DESTINATIONS := ["graveyard", "exile"]
+
+const ACTIVE_CARD_ALIASES := {
+	"破防准备": "break_defense_setup",
+	"削攻准备": "weaken_attack_setup",
+	"疗伤": "heal_wound",
+	"清除增益": "clear_buff",
+	"中毒": "poison",
+	"防御准备": "defense_setup",
+	"急抽": "quick_draw",
+	"空卡": "blank_card"
+}
 
 static func get_cards() -> Dictionary:
-	return {
+	var cards := {
 		"火球符": {
 			"id": "火球符",
 			"name": "火球符",
@@ -28,6 +43,128 @@ static func get_cards() -> Dictionary:
 			"effect": {"kind": "direct_damage", "value": 3},
 			"after_use": "graveyard"
 		},
+		"blank_card": {
+			"id": "blank_card",
+			"name": "空卡",
+			"type": TYPE_SPELL,
+			"build_cost": 0,
+			"tags": ["通用", "废卡"],
+			"description": "没有效果。",
+			"effect_steps": [
+				{"effect_type": "no_effect"}
+			],
+			"after_use": "graveyard",
+			"content_state": CONTENT_STATE_ACTIVE
+		},
+		"break_defense_setup": {
+			"id": "break_defense_setup",
+			"name": "破防准备",
+			"type": TYPE_SPELL,
+			"build_cost": 1,
+			"tags": ["通用", "攻击附加", "削弱"],
+			"description": "选择我方一个单位。其下一次普通攻击伤害减半；若命中，给予目标 1 层破甲。",
+			"target_scope": "ally_unit",
+			"ai_priority": 60,
+			"effect_steps": [
+				{"effect_type": "add_next_attack_modifier", "target": "context_target", "damage_multiplier": 0.5},
+				{"effect_type": "add_status_on_hit", "target": "context_target", "status": "armor_break", "value": 1}
+			],
+			"after_use": "graveyard",
+			"content_state": CONTENT_STATE_ACTIVE
+		},
+		"weaken_attack_setup": {
+			"id": "weaken_attack_setup",
+			"name": "削攻准备",
+			"type": TYPE_SPELL,
+			"build_cost": 1,
+			"tags": ["通用", "攻击附加", "削弱"],
+			"description": "选择我方一个单位。其下一次普通攻击伤害减半；若命中，给予目标 1 层虚弱。",
+			"target_scope": "ally_unit",
+			"ai_priority": 58,
+			"effect_steps": [
+				{"effect_type": "add_next_attack_modifier", "target": "context_target", "damage_multiplier": 0.5},
+				{"effect_type": "add_status_on_hit", "target": "context_target", "status": "weak", "value": 1}
+			],
+			"after_use": "graveyard",
+			"content_state": CONTENT_STATE_ACTIVE
+		},
+		"heal_wound": {
+			"id": "heal_wound",
+			"name": "疗伤",
+			"type": TYPE_SPELL,
+			"build_cost": 2,
+			"tags": ["通用", "回复", "行动限制"],
+			"description": "选择我方一个未攻击且受伤的单位，回复 8 点生命。使用后目标本回合不能普通攻击。",
+			"target_scope": "ally_unit",
+			"ai_priority": 70,
+			"effect_steps": [
+				{"effect_type": "heal", "target": "context_target", "value": 8},
+				{"effect_type": "set_unit_action_lock", "target": "context_target"}
+			],
+			"after_use": "graveyard",
+			"content_state": CONTENT_STATE_ACTIVE
+		},
+		"clear_buff": {
+			"id": "clear_buff",
+			"name": "清除增益",
+			"type": TYPE_SPELL,
+			"build_cost": 1,
+			"tags": ["通用", "解除", "对策"],
+			"description": "选择敌方一个单位，移除其身上 1 个正面状态。",
+			"target_scope": "enemy_unit",
+			"ai_priority": 68,
+			"effect_steps": [
+				{"effect_type": "remove_status_by_tag", "target": "context_target", "tag": "positive", "value": 1}
+			],
+			"after_use": "graveyard",
+			"content_state": CONTENT_STATE_ACTIVE
+		},
+		"poison": {
+			"id": "poison",
+			"name": "中毒",
+			"type": TYPE_SPELL,
+			"build_cost": 1,
+			"tags": ["通用", "状态", "持续伤害"],
+			"description": "选择敌方一个单位，给予 2 层中毒。中毒在其回合开始抽卡完成后使其失去 1 点生命并衰减 1 层。",
+			"target_scope": "enemy_unit",
+			"ai_priority": 50,
+			"effect_steps": [
+				{"effect_type": "add_status", "target": "context_target", "status": "poison", "value": 2}
+			],
+			"after_use": "graveyard",
+			"content_state": CONTENT_STATE_ACTIVE
+		},
+		"quick_draw": {
+			"id": "quick_draw",
+			"name": "急抽",
+			"type": TYPE_SPELL,
+			"build_cost": 2,
+			"tags": ["通用", "抽牌", "污染"],
+			"description": "抽 2 张牌。使用后自身进入除外区，并将 1 张空卡放入墓地等待后续重整。",
+			"ai_priority": 35,
+			"effect_steps": [
+				{"effect_type": "draw_cards", "target": "self", "value": 2},
+				{"effect_type": "create_card_to_zone", "target": "self", "card_id": "blank_card", "zone": "graveyard", "value": 1},
+				{"effect_type": "move_source_card", "zone": "exile"}
+			],
+			"after_use": "exile",
+			"content_state": CONTENT_STATE_ACTIVE
+		},
+		"defense_setup": {
+			"id": "defense_setup",
+			"name": "防御准备",
+			"type": TYPE_SPELL,
+			"build_cost": 0,
+			"tags": ["通用", "防御", "增益"],
+			"description": "选择我方一个单位，获得 3 点下次减伤。",
+			"target_scope": "ally_unit",
+			"ai_priority": 40,
+			"effect_steps": [
+				{"effect_type": "add_status", "target": "context_target", "status": "next_damage_reduce", "value": 3}
+			],
+			"after_use": "graveyard",
+			"content_state": CONTENT_STATE_ACTIVE
+		},
 		"雷击符": {
 			"id": "雷击符",
 			"name": "雷击符",
@@ -44,7 +181,7 @@ static func get_cards() -> Dictionary:
 			"type": TYPE_SPELL,
 			"build_cost": 4,
 			"tags": ["通用", "符", "伤害", "削弱"],
-			"description": "对敌方单位造成 7 点伤害，并使目标防御力 -1。",
+			"description": "对敌方单位造成 7 点伤害，并给予 1 层破甲。",
 			"effect": {
 				"kind": "multi",
 				"effects": [
@@ -131,7 +268,7 @@ static func get_cards() -> Dictionary:
 			"build_cost": 0,
 			"tags": ["通用", "防御", "符"],
 			"description": "我方单位获得 3 点下次减伤。",
-			"effect": {"kind": "add_status", "target": "all_players", "status": "下次减伤", "value": 3},
+			"effect": {"kind": "add_status", "target": "all_players", "status": "next_damage_reduce", "value": 3},
 			"after_use": "graveyard"
 		},
 		"血墨符": {
@@ -195,7 +332,7 @@ static func get_cards() -> Dictionary:
 			"build_cost": 1,
 			"tags": ["通用", "削弱", "符"],
 			"description": "给予敌方单位 2 层破甲。破甲会降低防御力，并在其回合结束时衰减。",
-			"effect": {"kind": "add_status", "target": "enemy", "status": "破甲", "value": 2},
+			"effect": {"kind": "add_status", "target": "enemy", "status": "armor_break", "value": 2},
 			"after_use": "graveyard"
 		},
 		"缚身符": {
@@ -205,7 +342,7 @@ static func get_cards() -> Dictionary:
 			"build_cost": 2,
 			"tags": ["通用", "削弱", "符"],
 			"description": "给予敌方单位 2 层虚弱。虚弱会降低攻击力，并在其回合结束时衰减。",
-			"effect": {"kind": "add_status", "target": "enemy", "status": "虚弱", "value": 2},
+			"effect": {"kind": "add_status", "target": "enemy", "status": "weak", "value": 2},
 			"after_use": "graveyard"
 		},
 		"护身符": {
@@ -431,7 +568,12 @@ static func get_cards() -> Dictionary:
 					"max_hp": 6,
 					"attack": 0,
 					"defense": 0,
-					"status_counters": {"taunt": 1}
+						"status_instances": [{
+							"status_id": "taunt",
+							"value": 1,
+							"counter": 1,
+							"source": "木偶侍"
+						}]
 				}
 			},
 			"after_use": "graveyard"
@@ -638,12 +780,49 @@ static func get_cards() -> Dictionary:
 			"after_use": "equipment"
 		}
 	}
+	for card_id_variant in cards.keys():
+		var card_id := str(card_id_variant)
+		var card: Dictionary = cards[card_id]
+		if not card.has("content_state"):
+			card["content_state"] = CONTENT_STATE_PROTOTYPE
+		if str(card.get("content_state", "")) == CONTENT_STATE_ACTIVE:
+			card["name_key"] = "card.%s.name" % card_id
+			card["description_key"] = "card.%s.description" % card_id
+		cards[card_id] = card
+	return cards
+
+static func normalize_card_id(card_id: String) -> String:
+	var text := str(card_id)
+	return str(ACTIVE_CARD_ALIASES.get(text, text))
+
+
+static func active_card_ids() -> Array:
+	var result: Array = []
+	for card_id_variant in get_cards().keys():
+		var card_id := str(card_id_variant)
+		var card: Dictionary = get_card(card_id)
+		if str(card.get("content_state", "")) == CONTENT_STATE_ACTIVE:
+			result.append(card_id)
+	return result
+
+
+static func active_card_aliases() -> Dictionary:
+	return ACTIVE_CARD_ALIASES.duplicate()
+
+
+static func is_active_card_id(card_id: String) -> bool:
+	if card_id != normalize_card_id(card_id):
+		return false
+	var card := get_card(card_id)
+	return str(card.get("content_state", "")) == CONTENT_STATE_ACTIVE
+
 
 static func get_card(card_id: String) -> Dictionary:
 	var cards := get_cards()
-	if not cards.has(card_id):
+	var normalized_id := normalize_card_id(card_id)
+	if not cards.has(normalized_id):
 		return {}
-	return (cards[card_id] as Dictionary).duplicate(true)
+	return (cards[normalized_id] as Dictionary).duplicate(true)
 
 static func card_score(card_id: String) -> int:
 	var card := get_card(card_id)

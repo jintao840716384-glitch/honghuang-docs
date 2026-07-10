@@ -1,12 +1,12 @@
 extends RefCounted
 class_name CardAcquisitionRules
 
-const CardDatabaseScript = preload("res://scripts/data/CardDatabase.gd")
+const CardDefinitionDatabaseScript = preload("res://scripts/data/CardDefinitionDatabase.gd")
 const DeckBuildRulesScript = preload("res://scripts/run/DeckBuildRules.gd")
 
 
 static func card_gain_result(card_id: String, deck_ids: Array, score_limit := 0) -> Dictionary:
-	if card_id == "" or CardDatabaseScript.get_card(card_id).is_empty():
+	if card_id == "" or not CardDefinitionDatabaseScript.is_active_card_id(card_id):
 		return {
 			"valid": false,
 			"destination": "none",

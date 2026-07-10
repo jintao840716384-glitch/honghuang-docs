@@ -2,6 +2,9 @@
 class_name CardResolver
 
 const CardDatabaseScript = preload("res://scripts/data/CardDatabase.gd")
+const CardDefinitionDatabaseScript = preload("res://scripts/data/CardDefinitionDatabase.gd")
+const BattleUnitScript = preload("res://scripts/battle/BattleUnit.gd")
+const StatusDatabaseScript = preload("res://scripts/data/StatusDatabase.gd")
 
 func apply_player_turn_start(battle) -> void:
 	_process_spell_zone_turn_start(battle)
@@ -89,6 +92,7 @@ func play_spell_card(battle, uid: String, skip_target_selection := false, contex
 	if card.is_empty():
 		return
 	var play_context: Dictionary = context.duplicate(true)
+	_fill_default_context_target(battle, card, play_context)
 	if str(card.get("after_use", "")) == "equipment":
 		var equipment_target = _equipment_target_unit(battle, play_context)
 		if equipment_target == null:
@@ -118,7 +122,7 @@ func play_spell_card(battle, uid: String, skip_target_selection := false, contex
 		"zone_attach_search":
 			_start_zone_attach_search(battle, uid, effect)
 		_:
-			if not skip_target_selection and _needs_enemy_target(effect) and battle.enemy_target_count() > 1:
+			if not skip_target_selection and _card_needs_enemy_target(card) and battle.enemy_target_count() > 1:
 				battle.begin_enemy_target_selection({
 					"type": "hand_card",
 					"uid": uid
@@ -128,8 +132,162 @@ func play_spell_card(battle, uid: String, skip_target_selection := false, contex
 			battle.emit_combat_event({"type": "card_played", "card": card})
 			resolve_and_finish_spell(battle, card, play_context)
 
+func play_side_hand_card(battle, side_id: String, source_unit, uid: String, context := {}) -> bool:
+	var manager = _side_deck_manager(battle, side_id)
+	if manager == null:
+		return false
+	var card: Dictionary = manager.find_hand_card(uid)
+	if card.is_empty():
+		return false
+	var play_context: Dictionary = context.duplicate(true)
+	_fill_side_context_target(battle, side_id, card, play_context)
+	if not _can_play_side_spell(battle, side_id, card, play_context):
+		return false
+	var removed: Dictionary = manager.remove_from_hand(uid)
+	if removed.is_empty():
+		return false
+	if side_id == BattleUnitScript.TEAM_ENEMY:
+		battle.add_log("敌方阵营使用卡：%s。" % removed.get("name", removed.get("id", "")))
+		battle.emit_combat_event({"type": "enemy_card_played", "source": _unit_event_key(battle, source_unit), "card": removed})
+	else:
+		battle.emit_combat_event({"type": "card_played", "card": removed})
+	var effect: Dictionary = removed.get("effect", {})
+	var steps: Array = _side_effect_steps_for_card(removed)
+	battle.effect_resolver.apply_steps(battle, source_unit, steps, play_context)
+	_finish_side_used_spell(battle, side_id, removed, play_context)
+	if side_id == BattleUnitScript.TEAM_ENEMY and not bool(effect.get("finish_later", false)):
+		battle.call("_finish_enemy_side_card")
+	return true
+
+func _side_deck_manager(battle, side_id: String):
+	match side_id:
+		BattleUnitScript.TEAM_PLAYER:
+			return battle.deck
+		BattleUnitScript.TEAM_ENEMY:
+			if battle.enemy_side == null:
+				return null
+			return battle.enemy_side.deck_manager
+	return null
+
+func _opponent_side(side_id: String) -> String:
+	return BattleUnitScript.TEAM_ENEMY if side_id == BattleUnitScript.TEAM_PLAYER else BattleUnitScript.TEAM_PLAYER
+
+func _fill_side_context_target(battle, side_id: String, card: Dictionary, context: Dictionary) -> void:
+	if context.has("target_unit") and context.get("target_unit", null) != null:
+		return
+	match str(card.get("target_scope", "")):
+		"ally_unit":
+			var ally_target = battle.choose_single_target(side_id)
+			if ally_target != null:
+				context["target_unit"] = ally_target
+		"enemy_unit":
+			var enemy_target = battle.choose_single_target(_opponent_side(side_id))
+			if enemy_target != null:
+				context["target_unit"] = enemy_target
+
+func _can_play_side_spell(battle, side_id: String, card: Dictionary, context := {}) -> bool:
+	if card.get("type", "") == CardDatabaseScript.TYPE_DEFENSE:
+		return false
+	var effect: Dictionary = card.get("effect", {})
+	var active_card := _active_card_id(card)
+	if active_card and not _card_uses_effect_steps(card):
+		return false
+	var target_scope := str(card.get("target_scope", ""))
+	if target_scope in ["ally_unit", "enemy_unit"]:
+		var target_unit = context.get("target_unit", null)
+		if target_unit == null:
+			return false
+		var expected_team := side_id if target_scope == "ally_unit" else _opponent_side(side_id)
+		if str(target_unit.team) != expected_team:
+			return false
+		if active_card:
+			if _card_has_effect_type(card, "heal") and _card_has_effect_type(card, "set_unit_action_lock"):
+				if battle.unit_action_used(target_unit):
+					return false
+				if int(target_unit.hp) >= int(target_unit.max_hp):
+					return false
+			if _card_has_effect_type(card, "add_next_attack_modifier") and _card_has_effect_type(card, "add_status_on_hit"):
+				if battle.unit_action_used(target_unit):
+					return false
+				if target_unit.current_attack() <= 0:
+					return false
+			if _card_has_effect_type(card, "remove_status_by_tag"):
+				if not battle.unit_has_positive_status(target_unit):
+					return false
+		else:
+			match str(effect.get("kind", "")):
+				"heal_and_exhaust":
+					if battle.unit_action_used(target_unit):
+						return false
+					if int(target_unit.hp) >= int(target_unit.max_hp):
+						return false
+				"prepare_attack_status":
+					if battle.unit_action_used(target_unit):
+						return false
+					if target_unit.current_attack() <= 0:
+						return false
+				"remove_positive_status":
+					if not battle.unit_has_positive_status(target_unit):
+						return false
+	if str(card.get("after_use", "")) == "equipment":
+		var equipment_target = context.get("target_unit", null)
+		if equipment_target == null:
+			return false
+		if equipment_target.equipment_count() >= int(equipment_target.equipment_limit):
+			return false
+	return true
+
+func _side_effect_steps_for_card(card: Dictionary) -> Array:
+	if _card_uses_effect_steps(card):
+		return _effect_steps_for_card(card)
+	var effect: Dictionary = card.get("effect", {}).duplicate(true)
+	if not effect.has("source"):
+		effect["source"] = card.get("name", card.get("id", "卡牌"))
+	match str(effect.get("kind", "")):
+		"direct_damage":
+			return [{
+				"effect_type": "damage",
+				"target": str(effect.get("target", "enemy")),
+				"value": int(effect.get("value", 0)),
+				"ignore_defense": bool(effect.get("ignore_defense", false)),
+				"source": effect.get("source", "")
+			}]
+		"heal":
+			return [{
+				"effect_type": "heal",
+				"target": str(effect.get("target", "self")),
+				"value": int(effect.get("value", 0)),
+				"source": effect.get("source", "")
+			}]
+	effect = _legacy_effect_as_step(effect)
+	return [effect]
+
+func _finish_side_used_spell(battle, side_id: String, card: Dictionary, context := {}) -> void:
+	var manager = _side_deck_manager(battle, side_id)
+	if manager == null:
+		return
+	match str(card.get("after_use", "graveyard")):
+		"exile":
+			manager.add_to_exile(card)
+			battle.emit_combat_event({"type": "card_moved_to_banish", "card": card})
+		"equipment":
+			var target_unit = context.get("target_unit", null)
+			if target_unit != null:
+				target_unit.attach_equipment_card(card)
+				battle.emit_combat_event({"type": "card_equipped", "card": card, "target": _unit_event_key(battle, target_unit), "target_uid": str(target_unit.uid)})
+			else:
+				manager.add_to_graveyard(card)
+				battle.emit_combat_event({"type": "card_moved_to_graveyard", "card": card})
+		_:
+			manager.add_to_graveyard(card)
+			battle.emit_combat_event({"type": "card_moved_to_graveyard", "card": card})
+
 func can_play_spell(battle, card: Dictionary, allow_equipment_replace := false, context := {}) -> bool:
 	var effect: Dictionary = card.get("effect", {})
+	var active_card := _active_card_id(card)
+	if active_card and not _card_uses_effect_steps(card):
+		battle.add_log("%s 缺少正式效果步骤。" % card.get("name", "卡牌"))
+		return false
 	var sword_cost := int(effect.get("sword_cost", 0))
 	if sword_cost > battle.player.sword_momentum:
 		battle.add_log("%s 需要 %d 点剑势。" % [card.get("name", ""), sword_cost])
@@ -154,6 +312,57 @@ func can_play_spell(battle, card: Dictionary, allow_equipment_replace := false, 
 		if battle.player.hp <= life_cost:
 			battle.add_log("%s 需要支付 %d 点生命。" % [card.get("name", ""), life_cost])
 			return false
+	var target_scope := str(card.get("target_scope", ""))
+	if target_scope in ["ally_unit", "enemy_unit"]:
+		var target_unit = context.get("target_unit", null)
+		if target_unit == null:
+			battle.add_log("%s 没有可用目标。" % card.get("name", "卡牌"))
+			return false
+		if target_scope == "ally_unit" and str(target_unit.team) != "player":
+			battle.add_log("%s 需要选择我方单位。" % card.get("name", "卡牌"))
+			return false
+		if target_scope == "enemy_unit" and str(target_unit.team) != "enemy":
+			battle.add_log("%s 需要选择敌方单位。" % card.get("name", "卡牌"))
+			return false
+		if active_card:
+			if _card_has_effect_type(card, "heal") and _card_has_effect_type(card, "set_unit_action_lock"):
+				if battle.unit_action_used(target_unit):
+					battle.add_log("%s 本回合已经行动过，不能成为 %s 的目标。" % [str(target_unit.name), card.get("name", "卡牌")])
+					return false
+				if int(target_unit.hp) >= int(target_unit.max_hp):
+					battle.add_log("%s 生命已满，不能成为 %s 的目标。" % [str(target_unit.name), card.get("name", "卡牌")])
+					return false
+			if _card_has_effect_type(card, "add_next_attack_modifier") and _card_has_effect_type(card, "add_status_on_hit"):
+				if battle.unit_action_used(target_unit):
+					battle.add_log("%s 本回合已经行动过，不能成为 %s 的目标。" % [str(target_unit.name), card.get("name", "卡牌")])
+					return false
+				if target_unit.current_attack() <= 0:
+					battle.add_log("%s 没有可用攻击，不能成为 %s 的目标。" % [str(target_unit.name), card.get("name", "卡牌")])
+					return false
+			if _card_has_effect_type(card, "remove_status_by_tag"):
+				if not battle.unit_has_positive_status(target_unit):
+					battle.add_log("%s 没有可清除的正面增益。" % str(target_unit.name))
+					return false
+		else:
+			match str(effect.get("kind", "")):
+				"heal_and_exhaust":
+					if battle.unit_action_used(target_unit):
+						battle.add_log("%s 本回合已经行动过，不能成为 %s 的目标。" % [str(target_unit.name), card.get("name", "卡牌")])
+						return false
+					if int(target_unit.hp) >= int(target_unit.max_hp):
+						battle.add_log("%s 生命已满，不能成为 %s 的目标。" % [str(target_unit.name), card.get("name", "卡牌")])
+						return false
+				"prepare_attack_status":
+					if battle.unit_action_used(target_unit):
+						battle.add_log("%s 本回合已经行动过，不能成为 %s 的目标。" % [str(target_unit.name), card.get("name", "卡牌")])
+						return false
+					if target_unit.current_attack() <= 0:
+						battle.add_log("%s 没有可用攻击，不能成为 %s 的目标。" % [str(target_unit.name), card.get("name", "卡牌")])
+						return false
+				"remove_positive_status":
+					if not battle.unit_has_positive_status(target_unit):
+						battle.add_log("%s 没有可清除的正面增益。" % str(target_unit.name))
+						return false
 	return true
 
 func _start_equipment_replacement(battle, uid: String, card: Dictionary, context := {}) -> void:
@@ -197,28 +406,17 @@ func choose_equipment_replacement(battle, equipment_uid: String) -> void:
 func _remove_equipment_by_uid(unit, equipment_uid: String) -> Dictionary:
 	if unit == null:
 		return {}
-	for i in range(unit.equipment.size()):
-		var card: Dictionary = unit.equipment[i]
-		if str(card.get("uid", "")) == equipment_uid:
-			unit.equipment.remove_at(i)
-			return card
-	return {}
+	return unit.remove_equipment_by_uid(equipment_uid)
 
 func _remove_equipment_effect(unit, card: Dictionary) -> void:
 	if unit == null:
 		return
-	_remove_equipment_effect_recursive(unit, card.get("effect", {}))
+	unit.remove_equipment_effects(card)
 
 func _remove_equipment_effect_recursive(unit, effect: Dictionary) -> void:
-	match str(effect.get("kind", "")):
-		"equipment_attack_bonus":
-			unit.equipment_attack_bonus -= int(effect.get("value", 0))
-		"equipment_defense_bonus":
-			unit.equipment_defense_bonus -= int(effect.get("value", 0))
-		"multi":
-			for sub_effect_variant in effect.get("effects", []):
-				var sub_effect: Dictionary = sub_effect_variant
-				_remove_equipment_effect_recursive(unit, sub_effect)
+	if unit == null:
+		return
+	unit.remove_equipment_effects({"effect": effect})
 
 func _start_pick_from_graveyard(battle, uid: String, tag: String) -> void:
 	var source: Dictionary = battle.deck.remove_from_hand(uid)
@@ -432,10 +630,16 @@ func resolve_and_finish_spell(battle, card: Dictionary, context := {}) -> void:
 		battle.player.copy_next_talisman = false
 		battle.add_log("复符诀生效：%s 将发动 2 次。" % card.get("name", ""))
 
-	resolve_spell_effect(battle, card, 1.0, context)
-	if copy_talisman:
-		resolve_spell_effect(battle, card, float(effect.get("second_multiplier", 0.5)), context)
-		battle.add_log("%s 的第二次效果按 50%% 结算。" % card.get("name", ""))
+	if _card_uses_effect_steps(card):
+		battle.effect_resolver.apply_steps(battle, battle.player, _effect_steps_for_card(card), context)
+		if copy_talisman:
+			battle.effect_resolver.apply_steps(battle, battle.player, _effect_steps_for_card(card), context)
+			battle.add_log("%s 的第二次效果按 50%% 结算。" % card.get("name", ""))
+	else:
+		resolve_spell_effect(battle, card, 1.0, context)
+		if copy_talisman:
+			resolve_spell_effect(battle, card, float(effect.get("second_multiplier", 0.5)), context)
+			battle.add_log("%s 的第二次效果按 50%% 结算。" % card.get("name", ""))
 
 	finish_used_spell(battle, card, is_talisman, context)
 	battle.check_victory_or_defeat()
@@ -443,6 +647,8 @@ func resolve_and_finish_spell(battle, card: Dictionary, context := {}) -> void:
 func resolve_spell_effect(battle, card: Dictionary, multiplier := 1.0, context := {}) -> void:
 	var effect: Dictionary = card.get("effect", {})
 	match effect.get("kind", ""):
+		"noop", "no_effect":
+			return
 		"multi":
 			for sub_effect_variant in effect.get("effects", []):
 				var sub_effect: Dictionary = sub_effect_variant
@@ -485,7 +691,7 @@ func resolve_spell_effect(battle, card: Dictionary, multiplier := 1.0, context :
 			var damage: int = _scaled(int(effect.get("value", 0)), multiplier)
 			var ignore_defense: bool = bool(effect.get("ignore_defense", false))
 			var damage_results: Array = battle.effect_resolver.apply_step(battle, battle.player, {
-				"kind": "damage",
+				"effect_type": "damage",
 				"target": str(effect.get("target", "enemy")),
 				"value": damage,
 				"ignore_defense": ignore_defense,
@@ -503,7 +709,7 @@ func resolve_spell_effect(battle, card: Dictionary, multiplier := 1.0, context :
 			var amount := _scaled(int(effect.get("value", 0)), multiplier)
 			var before: int = battle.player.hp
 			battle.effect_resolver.apply_steps(battle, battle.player, [{
-				"kind": "heal",
+				"effect_type": "heal",
 				"target": "player",
 				"value": amount,
 				"source": card.get("name", "")
@@ -517,33 +723,39 @@ func resolve_spell_effect(battle, card: Dictionary, multiplier := 1.0, context :
 		"pay_life_draw":
 			var life_cost := int(effect.get("life_cost", 0))
 			var draw_count := _scaled(int(effect.get("draw", 0)), multiplier)
-			battle.apply_damage_to_unit(battle.player, life_cost, str(card.get("name", "")))
+			battle.apply_life_loss_to_unit(battle.player, life_cost, str(card.get("name", "")))
 			battle.call("_draw_player_cards", draw_count, "card")
 			battle.call("_flush_deck_messages")
 			battle.add_log("%s：失去 %d 点生命，抽 %d 张牌。" % [card.get("name", ""), life_cost, draw_count])
 		"reduce_enemy_defense":
 			var amount := _scaled(int(effect.get("value", 0)), multiplier)
 			battle.effect_resolver.apply_steps(battle, battle.player, [{
-				"kind": "modify_stat",
+				"effect_type": "add_status",
 				"target": "enemy",
-				"stat": "defense",
-				"value": -amount,
+				"status": StatusDatabaseScript.STATUS_ARMOR_BREAK,
+				"value": amount,
 				"source": card.get("name", "")
 			}])
-			battle.add_log("%s：敌人防御力 -%d。" % [card.get("name", ""), amount])
+			battle.add_log("%s：敌人获得 %d 层破甲。" % [card.get("name", ""), amount])
 		"add_status":
 			var amount := _scaled(int(effect.get("value", 0)), multiplier)
 			battle.effect_resolver.apply_steps(battle, battle.player, [{
-				"kind": "add_status",
+				"effect_type": "add_status",
 				"target": str(effect.get("target", "enemy")),
 				"status": str(effect.get("status", "")),
 				"value": amount,
 				"source": card.get("name", "")
 			}], context)
+		"prepare_attack_status", "heal_and_exhaust", "remove_positive_status", "draw_and_pollute":
+			var step: Dictionary = effect.duplicate(true)
+			if not step.has("source"):
+				step["source"] = card.get("name", "")
+			step = _legacy_effect_as_step(step)
+			battle.effect_resolver.apply_steps(battle, battle.player, [step], context)
 		"random_enemy_damage":
 			var damage: int = _scaled(int(effect.get("value", 0)), multiplier)
 			var damage_results: Array = battle.effect_resolver.apply_step(battle, battle.player, {
-				"kind": "damage",
+				"effect_type": "damage",
 				"target": "random_enemy",
 				"value": damage,
 				"ignore_defense": bool(effect.get("ignore_defense", false)),
@@ -559,7 +771,7 @@ func resolve_spell_effect(battle, card: Dictionary, multiplier := 1.0, context :
 		"summon":
 			var count: int = max(0, _scaled(int(effect.get("count", 1)), multiplier))
 			battle.effect_resolver.apply_steps(battle, battle.player, [{
-				"kind": "summon",
+				"effect_type": "summon",
 				"count": count,
 				"unit": effect.get("unit", {}),
 				"source": card.get("name", "")
@@ -603,7 +815,7 @@ func finish_used_spell(battle, card: Dictionary, is_talisman: bool, context := {
 		battle.add_log("符匣：本场第一张“符”牌使用后放回卡组顶。")
 		return
 
-	match card.get("after_use", "graveyard"):
+	match str(context.get("source_card_destination", card.get("after_use", "graveyard"))):
 		"graveyard":
 			battle.deck.add_to_graveyard(card)
 			battle.emit_combat_event({"type": "card_moved_to_graveyard", "card": card})
@@ -632,7 +844,8 @@ func _prepare_spell_zone_card(card: Dictionary) -> void:
 func _apply_unit_turn_start_equipment(battle, unit) -> void:
 	if unit == null:
 		return
-	for card in unit.equipment:
+	for card_variant in unit.equipment_cards():
+		var card: Dictionary = card_variant
 		var effect: Dictionary = card.get("effect", {})
 		if effect.get("kind", "") != "equipment_sword_per_turn":
 			continue
@@ -660,26 +873,34 @@ func _equipment_target_full(battle, context := {}) -> bool:
 	var target_unit = _equipment_target_unit(battle, context)
 	if target_unit == null:
 		return true
-	return target_unit.equipment.size() >= int(target_unit.equipment_limit)
+	return target_unit.equipment_count() >= int(target_unit.equipment_limit)
 
 func _apply_equipment_stat_delta(battle, card: Dictionary, context := {}, stat := "", amount := 0) -> void:
 	var target_unit = _equipment_target_unit(battle, context)
 	if target_unit == null:
 		return
-	match stat:
-		"attack":
-			target_unit.equipment_attack_bonus += amount
-		"defense":
-			target_unit.equipment_defense_bonus += amount
+	target_unit.apply_equipment_stat_bonus(stat, amount)
 	card["equipped_to_uid"] = str(target_unit.uid)
 
 func _attach_equipment_to_target(battle, card: Dictionary, context := {}):
 	var target_unit = _equipment_target_unit(battle, context)
 	if target_unit == null:
 		target_unit = battle.player
-	card["equipped_to_uid"] = str(target_unit.uid)
-	target_unit.equipment.append(card)
+	target_unit.attach_equipment_card(card)
 	return target_unit
+
+func _fill_default_context_target(battle, card: Dictionary, context: Dictionary) -> void:
+	if context.has("target_unit") and context.get("target_unit", null) != null:
+		return
+	match str(card.get("target_scope", "")):
+		"ally_unit":
+			var ally_target = battle.formation.primary_player()
+			if ally_target != null:
+				context["target_unit"] = ally_target
+		"enemy_unit":
+			var enemy_target = battle.selected_enemy_unit()
+			if enemy_target != null:
+				context["target_unit"] = enemy_target
 
 func _unit_event_key(battle, unit) -> String:
 	if unit == null:
@@ -703,7 +924,7 @@ func activate_spell_zone_card(battle, uid: String) -> void:
 
 func get_available_responses(battle, event: Dictionary) -> Array:
 	var result: Array = []
-	var event_type := str(event.get("event_type", ""))
+	var event_type := _battle_event_type(battle, event)
 	for card in battle.player.spell_zone:
 		if card.get("type", "") != CardDatabaseScript.TYPE_DEFENSE:
 			continue
@@ -746,10 +967,10 @@ func resolve_timing_effect(battle, effect: Dictionary, event: Dictionary, source
 		battle.add_log("%s：消耗 %d 点剑势。" % [source_card.get("name", ""), sword_cost])
 	match effect.get("kind", ""):
 		"modify_damage":
-			var before: int = int(event.get("value", 0))
+			var before: int = _battle_event_value(battle, event)
 			var after: int = max(0, before + int(effect.get("value", 0)))
-			event["value"] = after
-			event["modifiers"].append({
+			_set_battle_event_value(battle, event, after)
+			_battle_event_modifiers(battle, event).append({
 				"source": source_card.get("name", ""),
 				"value": int(effect.get("value", 0))
 			})
@@ -792,35 +1013,34 @@ func resolve_timing_effect(battle, effect: Dictionary, event: Dictionary, source
 				battle.add_log("%s：对 %s 造成 %d 点伤害。" % [source_card.get("name", ""), source_unit.name, damage])
 				battle.call("_cleanup_defeated_units")
 				if int(source_unit.hp) <= 0:
-					event["cancelled"] = true
+					_set_battle_event_cancelled(battle, event, true)
 		"interrupt_event":
-			event["cancelled"] = true
+			_set_battle_event_cancelled(battle, event, true)
 			battle.add_log("%s：打断本次事件。" % source_card.get("name", ""))
 			battle.emit_combat_event({"type": "event_interrupted", "target": "enemy", "source": source_card.get("name", "")})
 		"cancel_or_reduce_event":
 			var source_unit = _event_source_unit(battle, event)
 			var is_boss := source_unit != null and str(source_unit.unit_rank) == "boss"
 			if is_boss and effect.has("boss_reduce"):
-				var before: int = int(event.get("value", 0))
+				var before: int = _battle_event_value(battle, event)
 				var after: int = max(0, before - int(effect.get("boss_reduce", 0)))
-				event["value"] = after
+				_set_battle_event_value(battle, event, after)
 				battle.add_log("%s：首领抗性，本次威力 %d -> %d。" % [source_card.get("name", ""), before, after])
 				battle.emit_combat_event({"type": "damage_reduced", "target": _event_target_key(battle, event), "value": before - after, "source": source_card.get("name", "")})
 			else:
-				event["cancelled"] = true
+				_set_battle_event_cancelled(battle, event, true)
 				battle.add_log("%s：取消本次事件。" % source_card.get("name", ""))
 				battle.emit_combat_event({"type": "event_interrupted", "target": "enemy", "source": source_card.get("name", "")})
 		"protect_destroy_target":
-			var protected_targets: Array = event.get("protected_targets", [])
-			var target_key := _target_key(event.get("target", {}))
+			var protected_targets: Array = _battle_event_protected_targets(battle, event)
+			var target_key := _target_key(_battle_event_target(battle, event))
 			if target_key != "":
 				protected_targets.append(target_key)
-			event["protected_targets"] = protected_targets
 			battle.add_log("%s：保护本次破坏目标。" % source_card.get("name", ""))
 		"set_player_hp_to_one_if_lethal":
-			var damage := int(event.get("value", 0))
+			var damage := _battle_event_value(battle, event)
 			if damage >= battle.player.hp:
-				event["value"] = max(0, battle.player.hp - 1)
+				_set_battle_event_value(battle, event, max(0, battle.player.hp - 1))
 				battle.add_log("%s：本次致命伤害改为保留 1 点生命。" % source_card.get("name", ""))
 		"multi":
 			for sub_effect in effect.get("effects", []):
@@ -911,10 +1131,10 @@ func move_spell_zone_card_to_destination(battle, card: Dictionary) -> void:
 func _extra_condition_met(battle, card: Dictionary, event: Dictionary) -> bool:
 	var effect: Dictionary = card.get("effect", {})
 	var event_sources: Array = card.get("event_sources", effect.get("event_sources", []))
-	if not event_sources.is_empty() and not (str(event.get("source", "")) in event_sources):
+	if not event_sources.is_empty() and not (str(_battle_event_source(battle, event)) in event_sources):
 		return false
 	if effect.get("kind", "") == "set_player_hp_to_one_if_lethal":
-		return int(event.get("value", 0)) >= battle.player.hp
+		return _battle_event_value(battle, event) >= battle.player.hp
 	return true
 
 func _response_target_matches(battle, card: Dictionary, event: Dictionary) -> bool:
@@ -936,13 +1156,13 @@ func _event_target_key(battle, event: Dictionary) -> String:
 		var target = battle.call("_event_target_unit", event)
 		if target != null:
 			return str(battle.call("_unit_event_key", target))
-	return str(event.get("target_key", "player"))
+	return _battle_event_target_key(battle, event, "player")
 
 func _event_source_unit(battle, event: Dictionary):
-	var source_key := str(event.get("attack_source_key", event.get("source_key", "")))
+	var source_key := _battle_event_attack_source_key(battle, event)
 	if battle.has_method("_event_target_unit"):
 		var source_unit = battle.call("_event_target_unit", {
-			"target": event.get("source", null),
+			"target": _battle_event_source(battle, event),
 			"target_key": source_key
 		})
 		if source_unit != null:
@@ -950,6 +1170,64 @@ func _event_source_unit(battle, event: Dictionary):
 	if source_key != "":
 		return battle.formation.unit_by_uid(source_key)
 	return null
+
+func _battle_event_type(battle, event: Dictionary) -> String:
+	if battle.has_method("battle_event_type"):
+		return str(battle.call("battle_event_type", event))
+	return str(event.get("event_type", ""))
+
+func _battle_event_source(battle, event: Dictionary):
+	if battle.has_method("battle_event_source"):
+		return battle.call("battle_event_source", event)
+	return event.get("source", null)
+
+func _battle_event_target(battle, event: Dictionary):
+	if battle.has_method("battle_event_target"):
+		return battle.call("battle_event_target", event)
+	return event.get("target", null)
+
+func _battle_event_target_key(battle, event: Dictionary, fallback := "") -> String:
+	if battle.has_method("battle_event_target_key"):
+		return str(battle.call("battle_event_target_key", event))
+	return str(event.get("target_key", fallback))
+
+func _battle_event_attack_source_key(battle, event: Dictionary) -> String:
+	if battle.has_method("battle_event_attack_source_key"):
+		return str(battle.call("battle_event_attack_source_key", event))
+	return str(event.get("attack_source_key", event.get("source_key", "")))
+
+func _battle_event_value(battle, event: Dictionary) -> int:
+	if battle.has_method("battle_event_value"):
+		return int(battle.call("battle_event_value", event))
+	return int(event.get("value", 0))
+
+func _set_battle_event_value(battle, event: Dictionary, value: int) -> void:
+	if battle.has_method("set_battle_event_value"):
+		battle.call("set_battle_event_value", event, value)
+	else:
+		event["value"] = int(value)
+
+func _set_battle_event_cancelled(battle, event: Dictionary, cancelled: bool) -> void:
+	if battle.has_method("set_battle_event_cancelled"):
+		battle.call("set_battle_event_cancelled", event, cancelled)
+	else:
+		event["cancelled"] = bool(cancelled)
+
+func _battle_event_modifiers(battle, event: Dictionary) -> Array:
+	if battle.has_method("battle_event_modifiers"):
+		var modifiers_value: Variant = battle.call("battle_event_modifiers", event)
+		return modifiers_value if modifiers_value is Array else []
+	var fallback_modifiers_value: Variant = event.get("modifiers", [])
+	event["modifiers"] = fallback_modifiers_value if fallback_modifiers_value is Array else []
+	return event["modifiers"]
+
+func _battle_event_protected_targets(battle, event: Dictionary) -> Array:
+	if battle.has_method("battle_event_protected_targets"):
+		var protected_targets_value: Variant = battle.call("battle_event_protected_targets", event)
+		return protected_targets_value if protected_targets_value is Array else []
+	var fallback_protected_targets_value: Variant = event.get("protected_targets", [])
+	event["protected_targets"] = fallback_protected_targets_value if fallback_protected_targets_value is Array else []
+	return event["protected_targets"]
 
 func _target_key(target) -> String:
 	if target is Dictionary:
@@ -960,6 +1238,41 @@ func _scaled(value: int, multiplier: float) -> int:
 	if value <= 0:
 		return 0
 	return max(1, int(floor(float(value) * multiplier)))
+
+func _active_card_id(card: Dictionary) -> bool:
+	return CardDefinitionDatabaseScript.is_active_card_id(str(card.get("id", "")))
+
+func _card_uses_effect_steps(card: Dictionary) -> bool:
+	return card.has("effect_steps") and card.get("effect_steps", []) is Array
+
+func _effect_steps_for_card(card: Dictionary) -> Array:
+	var result: Array = []
+	for step_variant in card.get("effect_steps", []):
+		if not (step_variant is Dictionary):
+			continue
+		var step: Dictionary = step_variant.duplicate(true)
+		if not step.has("source"):
+			step["source"] = card.get("name", card.get("id", "卡牌"))
+		result.append(step)
+	return result
+
+func _effect_step_types(card: Dictionary) -> Array:
+	var result: Array = []
+	for step_variant in card.get("effect_steps", []):
+		if step_variant is Dictionary:
+			var step: Dictionary = step_variant
+			result.append(str(step.get("effect_type", "")))
+	return result
+
+func _card_has_effect_type(card: Dictionary, effect_type: String) -> bool:
+	return _effect_step_types(card).has(effect_type)
+
+func _legacy_effect_as_step(effect: Dictionary) -> Dictionary:
+	var step: Dictionary = effect.duplicate(true)
+	if step.has("kind") and not step.has("effect_type"):
+		step["effect_type"] = str(step.get("kind", ""))
+	step.erase("kind")
+	return step
 
 func _needs_enemy_target(effect: Dictionary) -> bool:
 	match str(effect.get("kind", "")):
@@ -972,6 +1285,11 @@ func _needs_enemy_target(effect: Dictionary) -> bool:
 				if _needs_enemy_target(sub_effect):
 					return true
 	return false
+
+func _card_needs_enemy_target(card: Dictionary) -> bool:
+	if str(card.get("target_scope", "")) == "enemy_unit":
+		return true
+	return _needs_enemy_target(card.get("effect", {}))
 
 func _cards_in_deck_matching_filter(battle, filter: Dictionary) -> Array:
 	var result: Array = []

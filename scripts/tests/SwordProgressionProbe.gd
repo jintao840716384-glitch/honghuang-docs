@@ -17,15 +17,12 @@ const ROUTE := [
 ]
 
 const STARTER_SWORD := [
-	"青锋剑",
-	"起剑诀", "起剑诀",
-	"引剑入体",
-	"藏锋",
-	"小无相剑",
-	"护身符",
-	"回春符",
-	"疾剑诀",
-	"金刃符"
+	"break_defense_setup", "break_defense_setup",
+	"weaken_attack_setup", "weaken_attack_setup",
+	"defense_setup", "defense_setup",
+	"heal_wound",
+	"clear_buff",
+	"poison", "poison"
 ]
 
 const SCENARIOS := [
@@ -216,14 +213,6 @@ func _play_turn(battle) -> void:
 		if _act(battle):
 			continue
 		battle.end_player_turn()
-	while battle.phase == "response" and loop < 70:
-		loop += 1
-		var responses: Array = battle.get_available_responses_for_current_event()
-		var response_uid := _best_response_uid(responses)
-		if response_uid == "":
-			battle.skip_response()
-		else:
-			battle.add_card_to_chain(response_uid)
 	while battle.phase == "target_select":
 		battle.confirm_target_selection(str(battle.enemy.uid))
 
@@ -245,13 +234,12 @@ func _resolve_pending(battle) -> bool:
 
 func _play_card(battle) -> bool:
 	var priority := [
-		"青锋剑", "玄铁剑", "护心镜", "铁木甲",
-		"护身符", "藏锋",
-		"回春符", "小还丹", "甘露符", "玉露丹",
-		"起剑诀", "引剑入体", "小无相剑", "疾剑诀", "召剑诀",
-		"剑气横扫", "万剑诀", "一剑开天",
-		"破甲符", "缚身符", "固元符",
-		"雷击符", "裂石符", "火球符", "金刃符"
+		"heal_wound",
+		"defense_setup",
+		"break_defense_setup", "weaken_attack_setup",
+		"clear_buff",
+		"poison",
+		"quick_draw"
 	]
 	for wanted in priority:
 		var card := _find_hand_card(battle, wanted)
@@ -261,7 +249,9 @@ func _play_card(battle) -> bool:
 			continue
 		var before_hand: int = battle.deck.hand.size()
 		var uid := str(card.get("uid", ""))
-		if str(card.get("after_use", "")) == "equipment":
+		if str(card.get("target_scope", "")) == "ally_unit":
+			battle.play_hand_card_on_unit_target(uid, str(battle.player.uid))
+		elif str(card.get("after_use", "")) == "equipment":
 			battle.play_hand_card_on_unit_target(uid, str(battle.player.uid))
 		elif _is_enemy_target_card(card):
 			battle.play_hand_card_on_enemy_target(uid, str(battle.enemy.uid))
@@ -274,31 +264,23 @@ func _play_card(battle) -> bool:
 
 func _should_play_card(battle, card: Dictionary) -> bool:
 	var id := str(card.get("id", ""))
-	if id in ["回春符", "小还丹", "甘露符", "玉露丹"]:
-		return battle.player.hp <= battle.player.max_hp - 4
-	if id == "小无相剑":
-		return battle.player.sword_momentum >= 5 and battle.player.attack_actions_bonus <= 0
-	if id == "疾剑诀":
-		return battle.player.sword_momentum >= 3
-	if id == "引剑入体":
-		return battle.player.sword_momentum >= 2
-	if id == "剑气横扫":
-		return battle.player.sword_momentum >= 4
-	if id == "万剑诀":
-		return battle.player.sword_momentum >= 6
-	if id == "一剑开天":
-		return battle.player.sword_momentum >= 8
-	if id == "青锋剑" and battle.player.has_equipment("青锋剑"):
-		return false
-	if id == "铁木甲" and battle.player.has_equipment("铁木甲"):
-		return false
-	if id == "玄铁剑" and battle.player.has_equipment("玄铁剑"):
-		return false
-	if id == "护心镜" and battle.player.has_equipment("护心镜"):
-		return false
+	if id == "heal_wound":
+		return battle.player.hp <= battle.player.max_hp - 8 and not battle.player_unit_action_used(battle.player)
+	if id in ["break_defense_setup", "weaken_attack_setup"]:
+		return not battle.player_unit_action_used(battle.player)
+	if id == "defense_setup":
+		return battle.player.get_status("next_damage_reduce") <= 0
+	if id == "clear_buff":
+		return battle.unit_has_positive_status(battle.enemy)
 	if int(card.get("effect", {}).get("sword_cost", 0)) > battle.player.sword_momentum:
 		return false
-	return battle.resolver.can_play_spell(battle, card, true, {"equipment_target_uid": str(battle.player.uid)})
+	var context: Dictionary = {"equipment_target_uid": str(battle.player.uid)}
+	match str(card.get("target_scope", "")):
+		"ally_unit":
+			context["target_unit"] = battle.player
+		"enemy_unit":
+			context["target_unit"] = battle.enemy
+	return battle.resolver.can_play_spell(battle, card, true, context)
 
 func _act(battle) -> bool:
 	for unit in battle.formation.living_units("player"):
@@ -314,35 +296,17 @@ func _act(battle) -> bool:
 		return true
 	return false
 
-func _best_response_uid(responses: Array) -> String:
-	var priority := ["攻击无效符", "护身符", "反震符", "藏锋", "破法符", "护心符", "替身纸人"]
-	for wanted in priority:
-		for card_variant in responses:
-			var card: Dictionary = card_variant
-			if str(card.get("id", "")) == wanted:
-				return str(card.get("uid", ""))
-	return ""
-
 func _pick_reward(options: Array, deck: Array, score_limit: int) -> String:
 	var best_id := str(options[0])
 	var best_score := -999
 	var weights := {
-		"回春符": 14,
-		"小还丹": 12,
-		"甘露符": 10,
-		"青锋剑": 10,
-		"起剑诀": 9,
-		"引剑入体": 8,
-		"火球符": 8,
-		"金刃符": 8,
-		"护身符": 7,
-		"破甲符": 7,
-		"缚身符": 7,
-		"雷击符": 7,
-		"疾剑诀": 7,
-		"召剑诀": 6,
-		"剑气横扫": 6,
-		"小无相剑": 6
+		"heal_wound": 14,
+		"break_defense_setup": 11,
+		"weaken_attack_setup": 11,
+		"defense_setup": 9,
+		"poison": 8,
+		"clear_buff": 6,
+		"quick_draw": 5
 	}
 	for id_variant in options:
 		var id := str(id_variant)
@@ -362,6 +326,8 @@ func _find_hand_card(battle, card_id: String) -> Dictionary:
 	return {}
 
 func _is_enemy_target_card(card: Dictionary) -> bool:
+	if str(card.get("target_scope", "")) == "enemy_unit":
+		return true
 	var effect: Dictionary = card.get("effect", {})
 	var kind := str(effect.get("kind", ""))
 	return kind in ["direct_damage", "reduce_enemy_defense"] or (kind == "multi" and str(card.get("after_use", "")) != "equipment")

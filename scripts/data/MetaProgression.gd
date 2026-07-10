@@ -3,8 +3,9 @@ class_name MetaProgression
 
 const ProgressionDatabaseScript = preload("res://scripts/data/ProgressionDatabase.gd")
 const SaveMigrationServiceScript = preload("res://scripts/save/SaveMigrationService.gd")
+const SaveStoreScript = preload("res://scripts/save/SaveStore.gd")
 
-const SAVE_PATH := "user://progression.json"
+const SAVE_PATH := SaveStoreScript.PROGRESSION_PATH
 
 var data: Dictionary = {}
 
@@ -14,24 +15,12 @@ func _init() -> void:
 func reset_to_defaults() -> void:
 	data = SaveMigrationServiceScript.default_meta_progression_data()
 
-func load() -> void:
-	reset_to_defaults()
-	if not FileAccess.file_exists(SAVE_PATH):
-		return
-	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
-	if file == null:
-		return
-	var parsed: Variant = JSON.parse_string(file.get_as_text())
-	if parsed is Dictionary:
-		data = _merge_data(parsed as Dictionary)
+func load(path := SAVE_PATH) -> void:
+	data = SaveStoreScript.load_progression(path)
 
-func save() -> bool:
+func save(path := SAVE_PATH) -> bool:
 	data = SaveMigrationServiceScript.migrate_meta_progression(data)
-	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
-	if file == null:
-		return false
-	file.store_string(JSON.stringify(data, "\t"))
-	return true
+	return SaveStoreScript.save_progression(data, path)
 
 func add_points(job_id: String, amount: int, save_after := true) -> int:
 	if amount <= 0:
@@ -52,16 +41,16 @@ func points_spent(job_id: String) -> int:
 func points_available(job_id: String) -> int:
 	return max(0, points_total(job_id) - points_spent(job_id))
 
-func upgrade_level(job_id: String, upgrade_id: String) -> int:
+func upgrade_level(job_id: String, progression_id: String) -> int:
 	var state: Dictionary = _job_state(job_id)
 	var upgrades: Dictionary = state.get("upgrades", {})
-	return int(upgrades.get(upgrade_id, 0))
+	return int(upgrades.get(progression_id, 0))
 
-func next_upgrade_cost(job_id: String, upgrade_id: String) -> int:
-	var definition: Dictionary = upgrade_definition(job_id, upgrade_id)
+func next_upgrade_cost(job_id: String, progression_id: String) -> int:
+	var definition: Dictionary = upgrade_definition(job_id, progression_id)
 	if definition.is_empty():
 		return -1
-	var level: int = upgrade_level(job_id, upgrade_id)
+	var level: int = upgrade_level(job_id, progression_id)
 	var max_level: int = int(definition.get("max_level", 0))
 	if level >= max_level:
 		return -1
@@ -70,28 +59,28 @@ func next_upgrade_cost(job_id: String, upgrade_id: String) -> int:
 		return int(costs[level])
 	return int(definition.get("cost", 0))
 
-func can_buy_upgrade(job_id: String, upgrade_id: String) -> bool:
-	var cost: int = next_upgrade_cost(job_id, upgrade_id)
+func can_buy_upgrade(job_id: String, progression_id: String) -> bool:
+	var cost: int = next_upgrade_cost(job_id, progression_id)
 	return cost > 0 and points_available(job_id) >= cost
 
-func buy_upgrade(job_id: String, upgrade_id: String, save_after := true) -> String:
-	var definition: Dictionary = upgrade_definition(job_id, upgrade_id)
+func buy_upgrade(job_id: String, progression_id: String, save_after := true) -> String:
+	var definition: Dictionary = upgrade_definition(job_id, progression_id)
 	if definition.is_empty():
 		return "无效成长项。"
-	var cost: int = next_upgrade_cost(job_id, upgrade_id)
+	var cost: int = next_upgrade_cost(job_id, progression_id)
 	if cost <= 0:
 		return "该成长已达上限。"
 	if points_available(job_id) < cost:
 		return "修为点不足。"
 	var state: Dictionary = _job_state(job_id)
 	var upgrades: Dictionary = state.get("upgrades", {})
-	upgrades[upgrade_id] = int(upgrades.get(upgrade_id, 0)) + 1
+	upgrades[progression_id] = int(upgrades.get(progression_id, 0)) + 1
 	state["upgrades"] = upgrades
 	state["points_spent"] = int(state.get("points_spent", 0)) + cost
 	_set_job_state(job_id, state)
 	if save_after:
 		save()
-	return "%s 提升到 %d 级。" % [str(definition.get("name", upgrade_id)), int(upgrades.get(upgrade_id, 0))]
+	return "%s 提升到 %d 级。" % [str(definition.get("name", progression_id)), int(upgrades.get(progression_id, 0))]
 
 func bonuses_for_job(job_id: String) -> Dictionary:
 	var result := {
@@ -105,7 +94,8 @@ func bonuses_for_job(job_id: String) -> Dictionary:
 	}
 	for definition_variant in upgrades_for_job(job_id):
 		var definition: Dictionary = definition_variant
-		var level: int = upgrade_level(job_id, str(definition.get("id", "")))
+		var progression_id := str(definition.get("progression_id", ""))
+		var level: int = upgrade_level(job_id, progression_id)
 		if level <= 0:
 			continue
 		var bonus: Dictionary = definition.get("bonus_per_level", {})
@@ -130,8 +120,8 @@ static func layer_multiplier(layer_index: int) -> float:
 static func upgrades_for_job(job_id: String) -> Array:
 	return ProgressionDatabaseScript.upgrades_for_job(job_id)
 
-static func upgrade_definition(job_id: String, upgrade_id: String) -> Dictionary:
-	return ProgressionDatabaseScript.upgrade_definition(job_id, upgrade_id)
+static func upgrade_definition(job_id: String, progression_id: String) -> Dictionary:
+	return ProgressionDatabaseScript.upgrade_definition(job_id, progression_id)
 
 func _job_state(job_id: String) -> Dictionary:
 	var jobs: Dictionary = data.get("jobs", {})

@@ -2,7 +2,6 @@ extends "res://scripts/battle/BattleUnit.gd"
 class_name PlayerState
 
 const BattleUnitScript = preload("res://scripts/battle/BattleUnit.gd")
-
 var job_id := ""
 var job_name := ""
 var sword_momentum := 0
@@ -45,6 +44,7 @@ func setup_from_job(job: Dictionary) -> void:
 	equipment_defense_bonus = 0
 	attack_actions_bonus = 0
 	extra_attack_actions_this_turn = 0
+	attack_attach_statuses.clear()
 	clear_next_attack_modifiers()
 	reset_turn_state()
 
@@ -54,7 +54,7 @@ func start_deck_from_job(job: Dictionary) -> Array:
 func reset_for_battle() -> void:
 	sword_momentum = 0
 	set_resource("sword_momentum", 0)
-	status_counters.clear()
+	clear_statuses()
 	temp_attack_delta = 0
 	temp_defense_delta = 0
 	spell_zone.clear()
@@ -89,10 +89,10 @@ func reset_turn_state() -> void:
 	extra_attack_actions_this_turn = 0
 
 func current_attack() -> int:
-	return max(0, attack + temp_attack_delta + equipment_attack_bonus + attack_bonus_this_turn - get_status("虚弱"))
+	return max(0, attack + temp_attack_delta + equipment_attack_bonus + attack_bonus_this_turn - get_status(StatusDatabaseScript.STATUS_WEAK))
 
 func current_defense() -> int:
-	return max(0, defense + temp_defense_delta + equipment_defense_bonus - get_status("破甲"))
+	return defense + temp_defense_delta + equipment_defense_bonus - get_status(StatusDatabaseScript.STATUS_ARMOR_BREAK)
 
 func has_equipment(card_id: String) -> bool:
 	for card in equipment:

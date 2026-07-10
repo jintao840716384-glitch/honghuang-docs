@@ -1,6 +1,8 @@
 extends RefCounted
 class_name VisualAssetDatabase
 
+const CONTENT_STATE_ACTIVE := "active"
+
 const CATEGORY_UI_TEXTURE := "ui_texture"
 const CATEGORY_STATIC_TEXTURE := "static_texture"
 const CATEGORY_CHARACTER_SPRITE := "character_sprite"
@@ -23,6 +25,17 @@ static func category_ids() -> Array:
 		CATEGORY_BATTLE_ANIMATION,
 		CATEGORY_ICON,
 		CATEGORY_VFX
+	]
+
+
+static func fallback_asset_ids() -> Array:
+	return [
+		DEFAULT_UI_BACKGROUND,
+		DEFAULT_PANEL_TEXTURE,
+		DEFAULT_CHARACTER_PORTRAIT,
+		DEFAULT_CHARACTER_BATTLE_SPRITE,
+		DEFAULT_CARD_ICON,
+		DEFAULT_BATTLE_ANIMATION
 	]
 
 static func asset_definitions() -> Dictionary:
@@ -88,6 +101,7 @@ static func texture(asset_id: String) -> Texture2D:
 static func _asset(asset_id: String, category_id: String, path: String, placeholder_color: Color, description: String) -> Dictionary:
 	return {
 		"id": asset_id,
+		"content_state": CONTENT_STATE_ACTIVE,
 		"category": category_id,
 		"path": path,
 		"placeholder_color": placeholder_color,

@@ -4,6 +4,7 @@ class_name EncounterFactory
 const CharacterDatabaseScript = preload("res://scripts/data/CharacterDatabase.gd")
 const EnemyDeckTemplateDatabaseScript = preload("res://scripts/data/EnemyDeckTemplateDatabase.gd")
 const DifficultyCurveDatabaseScript = preload("res://scripts/data/DifficultyCurveDatabase.gd")
+const WorldDifficultyDatabaseScript = preload("res://scripts/data/WorldDifficultyDatabase.gd")
 
 const RANK_NORMAL := "normal"
 const RANK_ELITE := "elite"
@@ -11,6 +12,8 @@ const RANK_BOSS := "boss"
 
 
 static func get_encounter_for_battle(battle_number: int, encounter_type := "normal", story_layer_index := 0, world_difficulty := 0, rng: RandomNumberGenerator = null) -> Dictionary:
+	if not WorldDifficultyDatabaseScript.is_active_value(world_difficulty):
+		return {}
 	var layer_number: int = max(1, int(story_layer_index) + 1)
 	var templates: Array = EnemyDeckTemplateDatabaseScript.deck_templates_for(layer_number, encounter_type, world_difficulty)
 	if templates.is_empty():
@@ -19,7 +22,7 @@ static func get_encounter_for_battle(battle_number: int, encounter_type := "norm
 		templates = EnemyDeckTemplateDatabaseScript.deck_templates_for(1, "normal", world_difficulty)
 	var selected: Dictionary = {}
 	if templates.is_empty():
-		selected = EnemyDeckTemplateDatabaseScript.fallback_deck_template(encounter_type)
+		return {}
 	elif rng == null:
 		selected = (templates[0] as Dictionary).duplicate(true)
 	else:
@@ -40,7 +43,8 @@ static func build_encounter(template: Dictionary, battle_number: int, layer_numb
 	if units.is_empty():
 		units.append(_build_unit_from_character("mountain_demon", {"slot_index": 2}, rank, 0, battle_number, layer_number, encounter_type, world_difficulty))
 	var deck: Array = EnemyDeckTemplateDatabaseScript.deck_for_world(template, world_difficulty)
-	var draw_count: int = int(template.get("draw_per_turn", EnemyDeckTemplateDatabaseScript.default_draw_for_encounter(encounter_type)))
+	var base_draw_count: int = int(template.get("draw_per_turn", EnemyDeckTemplateDatabaseScript.default_draw_for_encounter(encounter_type)))
+	var draw_count: int = max(0, base_draw_count + DifficultyCurveDatabaseScript.draw_bonus(layer_number, encounter_type, world_difficulty))
 	return {
 		"id": str(template.get("id", "")),
 		"deck_template_id": str(template.get("deck_template_id", template.get("id", ""))),
@@ -52,7 +56,6 @@ static func build_encounter(template: Dictionary, battle_number: int, layer_numb
 		"deck": deck,
 		"character_refs": unit_refs.duplicate(true),
 		"draw_per_turn": draw_count,
-		"card_play_limit": int(template.get("card_play_limit", draw_count)),
 		"enemy_units": units,
 		"primary_enemy": (units[0] as Dictionary).duplicate(true)
 	}

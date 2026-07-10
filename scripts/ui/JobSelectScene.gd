@@ -8,6 +8,7 @@ const MetaProgressionScript = preload("res://scripts/data/MetaProgression.gd")
 const AudioManagerScript = preload("res://scripts/audio/AudioManager.gd")
 const UIStyleFactoryScript = preload("res://scripts/ui/UIStyleFactory.gd")
 const CharacterVisualDatabaseScript = preload("res://scripts/assets/CharacterVisualDatabase.gd")
+const LocalizationServiceScript = preload("res://scripts/localization/LocalizationService.gd")
 
 var selected_job_id := "sword"
 var job_buttons: Dictionary = {}
@@ -43,14 +44,14 @@ func _build_scene() -> void:
 	root.add_child(header)
 
 	var back_button := Button.new()
-	back_button.text = "返回"
+	back_button.text = _text("job_select.back", {}, "返回")
 	back_button.custom_minimum_size = Vector2(84.0, 36.0)
 	back_button.pressed.connect(_on_back_pressed)
 	_style_button(back_button, Color(0.08, 0.09, 0.10, 0.96), Color(0.40, 0.44, 0.50, 1.0))
 	header.add_child(back_button)
 
 	var title := Label.new()
-	title.text = "选择角色"
+	title.text = _text("job_select.title", {}, "选择角色")
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -76,7 +77,7 @@ func _build_scene() -> void:
 		job_row.add_child(button)
 
 	confirm_button = Button.new()
-	confirm_button.text = "确认角色"
+	confirm_button.text = _text("job_select.confirm", {}, "确认角色")
 	confirm_button.custom_minimum_size = Vector2(180.0, 44.0)
 	confirm_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	confirm_button.pressed.connect(_on_confirm_pressed)
@@ -103,7 +104,7 @@ func _create_job_card(job: Dictionary) -> Button:
 	button.add_child(layout)
 
 	var name_label := Label.new()
-	name_label.text = str(job.get("name", ""))
+	name_label.text = _text(str(job.get("name_key", "")), {}, str(job.get("name", "")))
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.add_theme_font_size_override("font_size", 28)
 	name_label.add_theme_color_override("font_color", Color(0.98, 0.88, 0.66, 1.0))
@@ -132,7 +133,7 @@ func _create_job_card(job: Dictionary) -> Button:
 	layout.add_child(portrait)
 
 	var portrait_label := Label.new()
-	portrait_label.text = str(job.get("name", ""))
+	portrait_label.text = _text(str(job.get("name_key", "")), {}, str(job.get("name", "")))
 	portrait_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	portrait_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	portrait_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -141,7 +142,7 @@ func _create_job_card(job: Dictionary) -> Button:
 	portrait.add_child(portrait_label)
 
 	var desc_label := Label.new()
-	desc_label.text = str(job.get("description", ""))
+	desc_label.text = _text(str(job.get("description_key", "")), {}, str(job.get("description", "")))
 	desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	desc_label.add_theme_font_size_override("font_size", 14)
@@ -157,12 +158,16 @@ func _job_stat_text(job: Dictionary) -> String:
 	var attack: int = int(job.get("attack", 0)) + int(bonuses.get("attack", 0))
 	var defense: int = int(job.get("defense", 0)) + int(bonuses.get("defense", 0))
 	var deck_score_bonus: int = int(bonuses.get("deck_score_limit", 0))
-	return "生命 %d    攻 %d / 防 %d    总分 +%d" % [max_hp, attack, defense, deck_score_bonus]
+	return _text("job_select.stats", {"hp": max_hp, "attack": attack, "defense": defense, "score": deck_score_bonus}, "生命 {hp}    攻 {attack} / 防 {defense}    总分 +{score}")
 
 func _job_progress_text(job_id: String) -> String:
 	if progression == null:
-		return "修为点 0"
-	return "修为点 %d / 累计 %d" % [progression.points_available(job_id), progression.points_total(job_id)]
+		return _text("job_select.progress_empty", {}, "修为点 0")
+	return _text("job_select.progress", {"available": progression.points_available(job_id), "total": progression.points_total(job_id)}, "修为点 {available} / 累计 {total}")
+
+
+func _text(text_id: String, params: Dictionary = {}, source_fallback := "") -> String:
+	return LocalizationServiceScript.text(text_id, "zh_cn", params, source_fallback)
 
 func _on_job_card_pressed(job_id: String) -> void:
 	_play_audio("ui_click")

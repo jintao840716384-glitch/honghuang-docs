@@ -2,7 +2,7 @@ extends RefCounted
 class_name DeckBuilderViewFactory
 
 const CardDatabaseScript = preload("res://scripts/data/CardDatabase.gd")
-const CardButtonScene = preload("res://scenes/CardButton.tscn")
+const CardButtonScene = preload("res://scenes/ui/CardButton.tscn")
 
 static func create_column(column_title: String, container_name: String, panel_style: StyleBox, with_scroll := true) -> Dictionary:
 	var panel := PanelContainer.new()

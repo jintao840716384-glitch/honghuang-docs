@@ -2,40 +2,20 @@ extends RefCounted
 class_name SettingsStore
 
 const GameSettingsScript = preload("res://scripts/settings/GameSettings.gd")
-const SaveMigrationServiceScript = preload("res://scripts/save/SaveMigrationService.gd")
+const SaveStoreScript = preload("res://scripts/save/SaveStore.gd")
 const InputSettingsScript = preload("res://scripts/settings/InputSettings.gd")
 
-const SETTINGS_PATH := "user://settings.cfg"
+const SETTINGS_PATH := SaveStoreScript.SETTINGS_PATH
 
 static func default_settings() -> Dictionary:
 	return GameSettingsScript.default_data()
 
 static func load_settings(path := SETTINGS_PATH) -> Dictionary:
-	var settings: Dictionary = default_settings()
-	var config := ConfigFile.new()
-	if not FileAccess.file_exists(path):
-		return settings
-	var err := config.load(path)
-	if err != OK:
-		return settings
-	var source_version: int = SaveMigrationServiceScript.config_schema_version(config, SaveMigrationServiceScript.SAVE_KIND_SETTINGS)
-	for section in settings.keys():
-		var section_data: Dictionary = settings[section]
-		for key in section_data.keys():
-			if config.has_section_key(str(section), str(key)):
-				section_data[key] = config.get_value(str(section), str(key), section_data[key])
-		settings[section] = section_data
-	return SaveMigrationServiceScript.migrate_settings(settings, source_version)
+	return SaveStoreScript.load_settings(default_settings(), path)
 
 static func save_settings(settings: Dictionary, path := SETTINGS_PATH) -> int:
 	var sanitized: Dictionary = GameSettingsScript.sanitize(settings)
-	var config := ConfigFile.new()
-	SaveMigrationServiceScript.apply_config_metadata(config, SaveMigrationServiceScript.SAVE_KIND_SETTINGS)
-	for section in sanitized.keys():
-		var section_data: Dictionary = sanitized[section]
-		for key in section_data.keys():
-			config.set_value(str(section), str(key), section_data[key])
-	return config.save(path)
+	return SaveStoreScript.save_settings(sanitized, path)
 
 static func set_audio_volume(settings: Dictionary, volume_key: String, value: float) -> Dictionary:
 	var result: Dictionary = GameSettingsScript.sanitize(settings)
